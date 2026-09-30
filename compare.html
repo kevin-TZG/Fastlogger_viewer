@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Archicad Model Audit Compare</title>
+<style>
+html, body { margin: 0; padding: 0; background: #f6f4f0; color: #1a1a1a; font-family: "Arial Narrow", "ArialNarrow", Arial, sans-serif; font-size: 15px; line-height: 1.35; }
+.report { max-width: 1380px; margin: 0 auto; padding: 28px 24px 64px; background: #fff; box-shadow: 0 0 0 1px #ddd; }
+.kicker { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 6px; color: #b42318; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 0 0 10px; }
+h1 { font-size: 34px; font-weight: 400; margin: 0; }
+.meta { margin: 0 0 18px; opacity: .75; }
+.hint { font-size: 12px; opacity: .7; margin: 0 0 16px; }
+h2 { font-size: 20px; font-weight: 400; margin: 36px 0 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.loaders { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 18px; }
+.slot { min-height: 112px; padding: 16px; background: #f6f4f0; border: 1px dashed #1a1a1a; cursor: pointer; }
+.slot:hover, .slot.over { background: #ece7df; }
+.slot.ready { border-style: solid; }
+.slot input { display: none; }
+.slot .when { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; margin: 0 0 6px; }
+.slot .name { font-size: 18px; margin: 0 0 4px; word-break: break-word; }
+.slot .sub { font-size: 13px; opacity: .7; margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 18px; }
+button, .file-btn { font: inherit; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; padding: 6px 12px; border: 1px solid #1a1a1a; background: #fff; color: #1a1a1a; cursor: pointer; }
+button:hover, .file-btn:hover { background: #f6f4f0; }
+button:disabled { opacity: .45; cursor: default; }
+.warn { padding: 10px 12px; margin: 0 0 16px; background: #f6f4f0; border-left: 3px solid #c5921a; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin: 0 0 22px; }
+.kpi { padding: 12px 12px 10px; background: #f6f4f0; border-top: 3px solid #1a1a1a; }
+.kpi.down { border-top-color: #2f6f3e; }
+.kpi.up { border-top-color: #b42318; }
+.kpi b { display: block; font-size: 28px; font-weight: 400; line-height: 1; }
+.kpi em { display: block; font-style: normal; font-size: 13px; margin: 4px 0 2px; }
+.kpi.down em { color: #2f6f3e; }
+.kpi.up em { color: #b42318; }
+.kpi span { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; }
+.identity { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 18px; }
+.identity p { margin: 0; }
+.identity small { display: block; opacity: .65; font-size: 12px; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+nav.toc a { text-decoration: none; padding: 5px 10px; font-size: 13px; border: 1px solid #1a1a1a; color: #1a1a1a; }
+nav.toc a:hover { background: #f6f4f0; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 10px; }
+.filters label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+.search { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid #1a1a1a; min-width: 220px; }
+.chip { display: inline-block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border: 1px solid #1a1a1a; }
+.chip.add { color: #b42318; border-color: #b42318; }
+.chip.rem { color: #2f6f3e; border-color: #2f6f3e; }
+.chip.chg { color: #8a6a12; border-color: #c5921a; }
+.chip.same { opacity: .65; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px; vertical-align: top; }
+thead th { font-weight: 400; letter-spacing: .06em; text-transform: uppercase; font-size: 11px; border-bottom: 1px solid #1a1a1a; }
+td { border-bottom: 1px solid #ece7df; }
+tr.add td { background: #f8eceb; }
+tr.rem td { background: #eef5ef; }
+tr.chg td { background: #f8f3e6; }
+td.mark { white-space: nowrap; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; width: 1%; }
+tr.add td.mark { color: #b42318; }
+tr.rem td.mark { color: #2f6f3e; }
+tr.chg td.mark { color: #8a6a12; }
+.diff { color: #8a6a12; }
+.diff del { text-decoration: line-through; opacity: .7; margin-right: 4px; }
+.diff ins { text-decoration: none; }
+.empty { opacity: .65; margin: 12px 0 0; }
+.results { display: none; }
+.results.show { display: block; }
+@media (max-width: 800px) {
+  .loaders, .identity { grid-template-columns: 1fr; }
+}
+@media print {
+  .loaders, .actions, .filters, .hint { display: none !important; }
+  .report { box-shadow: none; max-width: none; }
+}
+</style>
+</head>
+<body>
+<article class="report">
+  <div class="head">
+    <div>
+      <p class="kicker">Tonkin Zulaikha Greer Architects</p>
+      <h1>Archicad Model Audit Compare</h1>
+    </div>
+  </div>
+  <p class="meta">Drop a before report and an after report to see what was added, removed, or changed.</p>
+  <p class="hint">Same project, two scans. Row identity uses Unique ID when present, otherwise source view + element type. KPI totals can stay the same while individual rows still move.</p>
+
+  <div class="loaders">
+    <label class="slot" id="slot-before" data-side="before">
+      <input type="file" id="file-before" accept=".html,text/html">
+      <p class="when">Before</p>
+      <p class="name" id="before-name">Choose or drop the earlier report</p>
+      <p class="sub" id="before-sub">TZG Model Auditool HTML</p>
+    </label>
+    <label class="slot" id="slot-after" data-side="after">
+      <input type="file" id="file-after" accept=".html,text/html">
+      <p class="when">After</p>
+      <p class="name" id="after-name">Choose or drop the later report</p>
+      <p class="sub" id="after-sub">TZG Model Auditool HTML</p>
+    </label>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="swap" disabled>Swap before / after</button>
+    <button type="button" id="clear" disabled>Clear</button>
+    <span class="hint" id="status" style="margin:0;"></span>
+  </div>
+
+  <div id="warn" class="warn" hidden></div>
+
+  <div id="results" class="results">
+    <div class="identity">
+      <p id="id-before"></p>
+      <p id="id-after"></p>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <nav class="toc" id="toc"></nav>
+    <div class="filters">
+      <label><input type="checkbox" id="show-add" checked> Added</label>
+      <label><input type="checkbox" id="show-rem" checked> Removed</label>
+      <label><input type="checkbox" id="show-chg" checked> Changed</label>
+      <label><input type="checkbox" id="show-same"> Unchanged</label>
+      <input class="search" id="search" type="search" placeholder="Filter rows">
+    </div>
+    <div id="sections"></div>
+  </div>
+</article>
+<script>
+(function () {
+  const SKIP_FIELDS = { "Renovation status": true, "Design option set": true };
+  const PREFERRED_COLS = [
+    "Attribute name", "Library part", "Font", "Element type",
+    "Source view ID", "Source view name", "Element ID", "Unique ID",
+    "Layer name", "Operators", "2D elements", "3D elements"
+  ];
+  const KPI_DEFS = [
+    { key: "library", label: "Library", section: "Library" },
+    { key: "attr3d", label: "3D attributes", section: "3D elements" },
+    { key: "attr2d", label: "2D attributes", section: "2D elements" },
+    { key: "pictures", label: "Pictures", section: "Picture" },
+    { key: "exploded", label: "Exploded", section: "Exploded" },
+    { key: "highRiskOperators", label: "High Risk Operators", section: "High Risk Operators" },
+    { key: "unused", label: "Unused", section: "Unused" },
+    { key: "ssdo", label: "SS-DO", section: "SS-DO" },
+    { key: "font", label: "Font", section: "Font" }
+  ];
+  const LABEL_TO_KEY = {
+    library: "library",
+    "3dattributes": "attr3d",
+    "2dattributes": "attr2d",
+    pictures: "pictures",
+    exploded: "exploded",
+    explodedview1000: "exploded",
+    operations: "highRiskOperators",
+    highriskoperators: "highRiskOperators",
+    unused: "unused",
+    ssdo: "ssdo",
+    font: "font"
+  };
+
+  let beforeRep = null;
+  let afterRep = null;
+  let beforeFile = null;
+  let afterFile = null;
+  let lastDiff = null;
+
+  function text(el) { return (el && el.textContent || "").replace(/\s+/g, " ").trim(); }
+  function norm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function formatNumber(n) {
+    if (!Number.isFinite(n)) return "—";
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  function parseCount(s) {
+    const n = parseInt(String(s || "").replace(/[^\d-]/g, ""), 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+  function projectStem(name) {
+    return String(name || "").replace(/\s*[-–]\s*\d{4}[./]\d{2}[./]\d{2}.*$/, "").trim();
+  }
+  function setStatus(s) {
+    document.getElementById("status").textContent = s || "";
+  }
+
+  function parseExplodedLabel(s) {
+    const raw = String(s || "");
+    const pair = raw.match(/([\d,]+)\s*\(\s*([\d,]+)/);
+    if (pair)
+      return { views: parseInt(pair[1].replace(/,/g, ""), 10), elements: parseInt(pair[2].replace(/,/g, ""), 10) };
+    const n = parseInt(raw.replace(/[^\d-]/g, ""), 10);
+    return Number.isFinite(n) ? { views: n, elements: 0 } : null;
+  }
+
+  function rowObject(headers, cells) {
+    const obj = {};
+    for (let i = 0; i < headers.length; i++)
+      obj[headers[i]] = cells[i] || "";
+    return obj;
+  }
+
+  function rowKey(section, row) {
+    const uid = String(row["Unique ID"] || "").trim();
+    if (uid) return "uid:" + uid;
+    return "k:" + [section, row["Source view ID"] || "", row["Source view name"] || "", row["Element type"] || ""].join("\t");
+  }
+
+  function parseReport(html, fileName) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const rec = {
+      file: fileName,
+      project: text(doc.querySelector("h1")) || fileName,
+      scanned: text(doc.querySelector(".meta")).replace(/\s*[·.]\s*Arial Narrow.*/i, "").replace(/^Last scan\s+/i, ""),
+      library: 0, attr3d: 0, attr2d: 0, pictures: 0, exploded: 0, explodedElements: 0,
+      highRiskOperators: 0, unused: 0, ssdo: 0, font: 0,
+      sections: {},
+      sectionOrder: []
+    };
+    const jsonEl = doc.getElementById("tzg-audit-summary");
+    if (jsonEl) {
+      try {
+        const data = JSON.parse(jsonEl.textContent);
+        ["project", "scanned", "library", "attr3d", "attr2d", "pictures", "exploded",
+          "explodedElements", "highRiskOperators", "unused", "ssdo", "font"].forEach(function (k) {
+          if (data[k] != null) rec[k] = data[k];
+        });
+      } catch (e) {}
+    }
+    const kpis = doc.querySelectorAll(".kpi");
+    for (let i = 0; i < kpis.length; i++) {
+      const key = LABEL_TO_KEY[norm(text(kpis[i].querySelector("span")))];
+      if (!key) continue;
+      if (key === "exploded") {
+        const parsed = parseExplodedLabel(text(kpis[i].querySelector("b")));
+        if (parsed) {
+          rec.exploded = parsed.views;
+          if (parsed.elements) rec.explodedElements = parsed.elements;
+        }
+        continue;
+      }
+      const value = parseInt(text(kpis[i].querySelector("b")).replace(/,/g, ""), 10);
+      if (Number.isFinite(value)) rec[key] = value;
+    }
+
+    const blocks = doc.querySelectorAll("section");
+    const seen = {};
+    function addSection(name, headers, rows) {
+      if (!name || name === "Main" || seen[name]) return;
+      seen[name] = true;
+      rec.sectionOrder.push(name);
+      rec.sections[name] = { name: name, headers: headers, rows: rows };
+    }
+    for (let i = 0; i < blocks.length; i++) {
+      const h2 = blocks[i].querySelector(":scope > h2");
+      if (!h2) continue;
+      const name = text(h2);
+      const table = blocks[i].querySelector("table");
+      if (!table || !table.rows.length) {
+        addSection(name, [], []);
+        continue;
+      }
+      const headRow = table.tHead && table.tHead.rows[0] ? table.tHead.rows[0] : table.rows[0];
+      const headers = [];
+      for (let c = 0; c < headRow.cells.length; c++) headers.push(text(headRow.cells[c]));
+      const rows = [];
+      const start = table.tHead ? 0 : 1;
+      const bodies = table.tBodies.length ? table.tBodies : [{ rows: Array.prototype.slice.call(table.rows, start) }];
+      for (let b = 0; b < bodies.length; b++) {
+        const bodyRows = bodies[b].rows;
+        for (let r = 0; r < bodyRows.length; r++) {
+          if (bodyRows[r].classList && bodyRows[r].classList.contains("group")) continue;
+          const cells = [];
+          for (let c = 0; c < bodyRows[r].cells.length; c++) cells.push(text(bodyRows[r].cells[c]));
+          if (cells.join("")) rows.push(rowObject(headers, cells));
+        }
+      }
+      addSection(name, headers, rows);
+    }
+    return rec;
+  }
+
+  function comparableFields(beforeHeaders, afterHeaders) {
+    const afterSet = {};
+    afterHeaders.forEach(function (h) { afterSet[h] = true; });
+    return beforeHeaders.filter(function (h) {
+      return afterSet[h] && !SKIP_FIELDS[h];
+    });
+  }
+
+  function displayCols(beforeHeaders, afterHeaders) {
+    const have = {};
+    beforeHeaders.concat(afterHeaders).forEach(function (h) {
+      if (!SKIP_FIELDS[h]) have[h] = true;
+    });
+    const cols = PREFERRED_COLS.filter(function (h) { return have[h]; });
+    Object.keys(have).forEach(function (h) {
+      if (cols.indexOf(h) < 0) cols.push(h);
+    });
+    return cols;
+  }
+
+  function diffSection(section, beforeSec, afterSec) {
+    const bRows = (beforeSec && beforeSec.rows) || [];
+    const aRows = (afterSec && afterSec.rows) || [];
+    const bHeaders = (beforeSec && beforeSec.headers) || [];
+    const aHeaders = (afterSec && afterSec.headers) || [];
+    const fields = comparableFields(bHeaders, aHeaders);
+    const bMap = new Map();
+    const aMap = new Map();
+    bRows.forEach(function (row) { bMap.set(rowKey(section, row), row); });
+    aRows.forEach(function (row) { aMap.set(rowKey(section, row), row); });
+    const added = [];
+    const removed = [];
+    const changed = [];
+    const same = [];
+    aMap.forEach(function (row, key) {
+      if (!bMap.has(key)) {
+        added.push({ kind: "add", after: row });
+        return;
+      }
+      const prev = bMap.get(key);
+      const diffs = fields.filter(function (f) { return (prev[f] || "") !== (row[f] || ""); });
+      if (diffs.length)
+        changed.push({ kind: "chg", before: prev, after: row, diffs: diffs });
+      else
+        same.push({ kind: "same", before: prev, after: row, diffs: [] });
+    });
+    bMap.forEach(function (row, key) {
+      if (!aMap.has(key))
+        removed.push({ kind: "rem", before: row });
+    });
+    return {
+      name: section,
+      cols: displayCols(bHeaders, aHeaders),
+      added: added,
+      removed: removed,
+      changed: changed,
+      same: same
+    };
+  }
+
+  function compareReports(before, after) {
+    const names = [];
+    const seen = {};
+    (before.sectionOrder || []).concat(after.sectionOrder || []).forEach(function (name) {
+      if (seen[name] || name === "Main") return;
+      seen[name] = true;
+      names.push(name);
+    });
+    KPI_DEFS.forEach(function (d) {
+      if (!seen[d.section] && (before.sections[d.section] || after.sections[d.section])) {
+        seen[d.section] = true;
+        names.push(d.section);
+      }
+    });
+    return {
+      before: before,
+      after: after,
+      sections: names.map(function (name) {
+        return diffSection(name, before.sections[name], after.sections[name]);
+      })
+    };
+  }
+
+  function kpiValue(rep, key) {
+    if (key === "exploded") return { n: rep.exploded || 0, extra: rep.explodedElements || 0 };
+    return { n: rep[key] || 0, extra: 0 };
+  }
+
+  function renderKpis(before, after) {
+    document.getElementById("kpis").innerHTML = KPI_DEFS.map(function (def) {
+      const b = kpiValue(before, def.key);
+      const a = kpiValue(after, def.key);
+      const delta = a.n - b.n;
+      const cls = delta < 0 ? " down" : delta > 0 ? " up" : "";
+      const extra = (def.key === "exploded" && (b.extra || a.extra))
+        ? "<em>" + formatNumber(b.extra) + " → " + formatNumber(a.extra) + " 2D</em>"
+        : "<em>" + formatNumber(b.n) + " → " + formatNumber(a.n) + (delta ? " (" + (delta > 0 ? "+" : "") + formatNumber(delta) + ")" : "") + "</em>";
+      return "<div class=\"kpi" + cls + "\"><b>" + formatNumber(a.n) + "</b>" + extra + "<span>" + escapeHtml(def.label) + "</span></div>";
+    }).join("");
+  }
+
+  function cellHtml(item, col) {
+    if (item.kind === "chg") {
+      const b = item.before[col] || "";
+      const a = item.after[col] || "";
+      if (b === a) return escapeHtml(a);
+      return "<span class=\"diff\"><del>" + escapeHtml(b) + "</del> → <ins>" + escapeHtml(a) + "</ins></span>";
+    }
+    const row = item.after || item.before || {};
+    return escapeHtml(row[col] || "");
+  }
+
+  function rowSearchText(item, cols) {
+    const row = Object.assign({}, item.before || {}, item.after || {});
+    return cols.map(function (c) { return row[c] || ""; }).join(" ").toLowerCase();
+  }
+
+  function visibleKinds() {
+    return {
+      add: document.getElementById("show-add").checked,
+      rem: document.getElementById("show-rem").checked,
+      chg: document.getElementById("show-chg").checked,
+      same: document.getElementById("show-same").checked
+    };
+  }
+
+  function render() {
+    if (!lastDiff) return;
+    const q = (document.getElementById("search").value || "").trim().toLowerCase();
+    const show = visibleKinds();
+    const toc = [];
+    const html = lastDiff.sections.map(function (sec) {
+      const items = []
+        .concat(sec.added, sec.removed, sec.changed, sec.same)
+        .filter(function (item) {
+          if (!show[item.kind]) return false;
+          if (q && rowSearchText(item, sec.cols).indexOf(q) < 0) return false;
+          return true;
+        });
+      const id = "sec-" + norm(sec.name);
+      toc.push("<a href=\"#" + id + "\">" + escapeHtml(sec.name)
+        + " <span class=\"chip add\">+" + sec.added.length + "</span>"
+        + " <span class=\"chip rem\">−" + sec.removed.length + "</span>"
+        + " <span class=\"chip chg\">~" + sec.changed.length + "</span></a>");
+      let body = "<section id=\"" + id + "\"><h2>" + escapeHtml(sec.name)
+        + " <span class=\"chip add\">Added " + sec.added.length + "</span>"
+        + " <span class=\"chip rem\">Removed " + sec.removed.length + "</span>"
+        + " <span class=\"chip chg\">Changed " + sec.changed.length + "</span>"
+        + " <span class=\"chip same\">Unchanged " + sec.same.length + "</span></h2>";
+      if (!items.length) {
+        const total = sec.added.length + sec.removed.length + sec.changed.length + sec.same.length;
+        body += "<p class=\"empty\">" + (total ? "No rows in the current filters." : "No findings in either report.") + "</p></section>";
+        return body;
+      }
+      body += "<table><thead><tr><th>Change</th>" + sec.cols.map(function (c) {
+        return "<th>" + escapeHtml(c) + "</th>";
+      }).join("") + "</tr></thead><tbody>";
+      const label = { add: "Added", rem: "Removed", chg: "Changed", same: "Unchanged" };
+      items.forEach(function (item) {
+        body += "<tr class=\"" + item.kind + "\"><td class=\"mark\">" + label[item.kind] + "</td>";
+        sec.cols.forEach(function (col) { body += "<td>" + cellHtml(item, col) + "</td>"; });
+        body += "</tr>";
+      });
+      body += "</tbody></table></section>";
+      return body;
+    }).join("");
+    document.getElementById("toc").innerHTML = toc.join("");
+    document.getElementById("sections").innerHTML = html;
+  }
+
+  function showResults() {
+    const before = beforeRep;
+    const after = afterRep;
+    lastDiff = compareReports(before, after);
+    document.getElementById("id-before").innerHTML = "<strong>Before</strong> " + escapeHtml(before.project)
+      + "<small>" + escapeHtml(before.scanned || before.file) + "</small>";
+    document.getElementById("id-after").innerHTML = "<strong>After</strong> " + escapeHtml(after.project)
+      + "<small>" + escapeHtml(after.scanned || after.file) + "</small>";
+    const stemB = projectStem(before.project);
+    const stemA = projectStem(after.project);
+    const warn = document.getElementById("warn");
+    if (stemB && stemA && stemB.toLowerCase() !== stemA.toLowerCase()) {
+      warn.hidden = false;
+      warn.textContent = "These reports look like different projects: “" + stemB + "” vs “" + stemA + "”.";
+    } else {
+      warn.hidden = true;
+      warn.textContent = "";
+    }
+    renderKpis(before, after);
+    document.getElementById("results").classList.add("show");
+    render();
+    const add = lastDiff.sections.reduce(function (n, s) { return n + s.added.length; }, 0);
+    const rem = lastDiff.sections.reduce(function (n, s) { return n + s.removed.length; }, 0);
+    const chg = lastDiff.sections.reduce(function (n, s) { return n + s.changed.length; }, 0);
+    setStatus(add + " added · " + rem + " removed · " + chg + " changed");
+  }
+
+  function updateActions() {
+    const ready = !!(beforeRep && afterRep);
+    document.getElementById("swap").disabled = !(beforeFile && afterFile);
+    document.getElementById("clear").disabled = !(beforeRep || afterRep);
+    if (ready) showResults();
+    else {
+      lastDiff = null;
+      document.getElementById("results").classList.remove("show");
+      document.getElementById("warn").hidden = true;
+      document.getElementById("kpis").innerHTML = "";
+      document.getElementById("toc").innerHTML = "";
+      document.getElementById("sections").innerHTML = "";
+    }
+  }
+
+  function fillSlot(side, file, rec) {
+    document.getElementById(side + "-name").textContent = rec.project || file.name;
+    document.getElementById(side + "-sub").textContent = (rec.scanned ? rec.scanned + " · " : "") + file.name;
+    document.getElementById("slot-" + side).classList.add("ready");
+  }
+
+  function resetSlot(side) {
+    document.getElementById(side + "-name").textContent = side === "before"
+      ? "Choose or drop the earlier report"
+      : "Choose or drop the later report";
+    document.getElementById(side + "-sub").textContent = "TZG Model Auditool HTML";
+    document.getElementById("slot-" + side).classList.remove("ready");
+    document.getElementById("file-" + side).value = "";
+  }
+
+  async function loadSide(side, file) {
+    if (!file) return;
+    setStatus("Reading " + file.name + "…");
+    try {
+      const rec = parseReport(await file.text(), file.name);
+      if (side === "before") { beforeFile = file; beforeRep = rec; }
+      else { afterFile = file; afterRep = rec; }
+      fillSlot(side, file, rec);
+      setStatus("");
+      updateActions();
+    } catch (err) {
+      setStatus("Could not read " + file.name);
+    }
+  }
+
+  function bindSlot(side) {
+    const slot = document.getElementById("slot-" + side);
+    const input = document.getElementById("file-" + side);
+    input.addEventListener("change", function () {
+      if (input.files && input.files[0]) loadSide(side, input.files[0]);
+    });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      slot.addEventListener(ev, function (e) {
+        e.preventDefault();
+        slot.classList.add("over");
+      });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      slot.addEventListener(ev, function () { slot.classList.remove("over"); });
+    });
+    slot.addEventListener("drop", function (e) {
+      e.preventDefault();
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) loadSide(side, file);
+    });
+  }
+
+  bindSlot("before");
+  bindSlot("after");
+
+  document.getElementById("swap").onclick = function () {
+    const bf = beforeFile, af = afterFile, br = beforeRep, ar = afterRep;
+    beforeFile = af; afterFile = bf;
+    beforeRep = ar; afterRep = br;
+    if (beforeFile && beforeRep) fillSlot("before", beforeFile, beforeRep);
+    if (afterFile && afterRep) fillSlot("after", afterFile, afterRep);
+    updateActions();
+  };
+  document.getElementById("clear").onclick = function () {
+    beforeRep = afterRep = beforeFile = afterFile = lastDiff = null;
+    resetSlot("before");
+    resetSlot("after");
+    setStatus("");
+    updateActions();
+  };
+  ["show-add", "show-rem", "show-chg", "show-same"].forEach(function (id) {
+    document.getElementById(id).onchange = render;
+  });
+  document.getElementById("search").oninput = render;
+
+  async function bootFromQuery() {
+    const q = new URLSearchParams(location.search);
+    const beforeUrl = q.get("before");
+    const afterUrl = q.get("after");
+    if (!beforeUrl || !afterUrl) return;
+    async function fetchAsFile(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(url + " " + res.status);
+      const html = await res.text();
+      const name = decodeURIComponent(url.split("/").pop() || "report.html");
+      return new File([html], name, { type: "text/html" });
+    }
+    try {
+      setStatus("Loading reports…");
+      const files = await Promise.all([fetchAsFile(beforeUrl), fetchAsFile(afterUrl)]);
+      await loadSide("before", files[0]);
+      await loadSide("after", files[1]);
+    } catch (err) {
+      setStatus("Could not load the reports from the page address");
+    }
+  }
+  bootFromQuery();
+})();
+</script>
+</body>
+</html>
