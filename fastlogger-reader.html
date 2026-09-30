@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archicad FastLogger reader</title>
+<style>
+  :root {
+    --bg: #f3efe6;
+    --paper: #fffcf7;
+    --ink: #1e1a14;
+    --muted: #5e564c;
+    --line: #e2d9cc;
+    --high: #8d2e2a;
+    --high-bg: #f8ebe8;
+    --med: #8a5410;
+    --med-bg: #f8f1e2;
+    --ok: #1d6b43;
+    --ok-bg: #e7f3ec;
+    --info: #2c4f6e;
+    --info-bg: #e8f0f6;
+    --shadow: 0 10px 30px rgba(60, 40, 20, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 "Avenir Next", "Segoe UI", sans-serif;
+  }
+  header.top {
+    padding: 28px 24px 8px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  header.top h1 {
+    font-family: Palatino, "Iowan Old Style", Georgia, serif;
+    font-weight: 600;
+    font-size: 32px;
+    letter-spacing: -0.03em;
+    margin: 0 0 6px;
+  }
+  header.top ol { margin: 8px 0 0; padding-left: 1.3em; color: var(--muted); max-width: 68ch; }
+  header.top li { margin: 0 0 6px; }
+  header.top a { color: var(--info); }
+  main { max-width: 980px; margin: 0 auto; padding: 18px 24px 64px; }
+  .drop {
+    border: 1.5px dashed #b7ab9a;
+    background: var(--paper);
+    border-radius: 16px;
+    padding: 28px 22px;
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+  .drop.over { border-color: var(--info); background: #f4f8fb; }
+  .drop strong { display: block; font-size: 18px; margin-bottom: 4px; }
+  .drop span { color: var(--muted); }
+  .drop input { margin-top: 14px; }
+  .row { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  button, .tabs button {
+    font: inherit;
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  button.primary { background: var(--ink); color: white; border-color: var(--ink); }
+  .tabs { display: flex; gap: 8px; margin: 22px 0 14px; }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: white; border-color: var(--ink); }
+  .hidden { display: none; }
+  article.report {
+    background: var(--paper);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 22px 22px 8px;
+  }
+  .lead {
+    font-family: Palatino, Georgia, serif;
+    font-size: 22px;
+    line-height: 1.35;
+    margin: 0 0 14px;
+  }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 0 0 18px; }
+  .fact { background: #f7f3ec; border-radius: 12px; padding: 10px 12px; }
+  .fact b { display: block; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .fact span { display: block; margin-top: 2px; word-break: break-word; }
+  ol.events { margin: 0 0 18px; padding-left: 1.2em; }
+  ol.events li { margin: 0 0 8px; }
+  .tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-right: 6px;
+    vertical-align: 1px;
+  }
+  .tag.high { background: var(--high-bg); color: var(--high); }
+  .tag.medium { background: var(--med-bg); color: var(--med); }
+  .tag.low { background: var(--info-bg); color: var(--info); }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .issue {
+    border-top: 1px solid var(--line);
+    padding: 16px 0 8px;
+  }
+  .issue h3 { margin: 8px 0; font-family: Palatino, Georgia, serif; font-size: 22px; }
+  .issue p { margin: 0 0 10px; max-width: 75ch; }
+  blockquote.ev {
+    margin: 8px 0 12px;
+    padding: 8px 12px;
+    background: #f6f3ee;
+    border-left: 3px solid #c4b8a6;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #3a342c;
+  }
+  .note { color: var(--muted); font-size: 13px; margin: 8px 0 18px; }
+  ul.clean { margin: 6px 0 12px; padding-left: 1.1em; }
+  ul.clean li { margin: 0 0 4px; }
+  @media (max-width: 800px) {
+    .facts { grid-template-columns: 1fr 1fr; }
+  }
+  @media print {
+    body { background: white; }
+    .drop, .tabs, .noprint { display: none; }
+    article.report { box-shadow: none; }
+    .pane { display: block !important; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Archicad FastLogger reader</h1>
+  <ol>
+    <li>Locate FastLogger files: Find the relevant FastLogger files on your computer. <a href="https://community.graphisoft.com/t5/Project-data-BIM/Archicad-FastLogger-Files/ta-p/303999">https://community.graphisoft.com/t5/Project-data-BIM/Archicad-FastLogger-Files/ta-p/303999</a></li>
+    <li>Upload the logs: Drag and drop the files that captured the event.</li>
+    <li>Analyze the report: Review the generated report to check for details regarding crashes or delays.</li>
+    <li>Get support: For more information or further investigation, contact your local Graphisoft distributor.</li>
+  </ol>
+</header>
+<main>
+  <div class="drop" id="drop">
+    <strong>Drop FastLogger files here</strong>
+    <div class="row">
+      <input id="picker" type="file" accept=".log,.rpt,.txt" multiple>
+      <button type="button" id="sampleHint" class="noprint" title="What this page can and cannot show">What you will get</button>
+    </div>
+  </div>
+  <div id="app"></div>
+</main>
+<script>
+"use strict";
+
+const MILESTONES = [
+  { kind: "auth", re: /Authenticate succeeded/ },
+  { kind: "reserve-conflict", re: /ReserveService finished, conflicts|is reserved by user|reserved by user/ },
+  { kind: "reserve-ok", re: /Reserve elements was successful/ },
+  { kind: "send-recv", re: /^Send & Receive$/ },
+  { kind: "receive-ok", re: /Get Partial changes was successful/ },
+  { kind: "receive-in", re: /^ReceiveChanges entered$/ },
+  { kind: "send-in", re: /^_?SendChanges entered$/ },
+  { kind: "put-ok", re: /project-manager-put-changes: ok/ },
+  { kind: "put-fail", re: /project-manager-put-changes: (?!ok\b|invocation)/ },
+  { kind: "send-ok", re: /Send changes was successful/ },
+  { kind: "send-exit", re: /_?SendChanges exited with error code/ },
+  { kind: "sync-ok", re: /set-last-synchronized-revision: ok/ },
+  { kind: "relative", re: /Relative location found instead of absolute|GSExceptionWrongTypeOfLocation/ },
+  { kind: "empty-path", re: /\[path length\] == 0|GSExceptionInvalidPath/ },
+  { kind: "unknown-folder", re: /unknown error \(OS errors/ },
+  { kind: "mount", re: /MountPointLocation is bigger/ },
+  { kind: "missing", re: /SourceMissing/ },
+  { kind: "hotlink", re: /Hotlink in File/ },
+  { kind: "nsexception", re: /I\/O NSException/ }
+];
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function redact(s) {
+  return String(s)
+    .replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, "[token hidden]")
+    .replace(/[`|].*$/, "")
+    .replace(/,X+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeMaybe(s) {
+  if (!/%[0-9A-Fa-f]{2}/.test(s)) return s;
+  try { return decodeURIComponent(s); } catch (e) { return s; }
+}
+
+function fileOrder(name) {
+  const m = String(name).match(/-(\d+)\.log$/i);
+  return m ? Number(m[1]) : 0;
+}
+
+function isPrintable(b) {
+  return b >= 32 && b < 127;
+}
+
+function latin1(bytes, start, end) {
+  let s = "";
+  for (let i = start; i < end; i++) s += String.fromCharCode(bytes[i]);
+  return s;
+}
+
+function tryRecord(data, i) {
+  if (i + 9 >= data.length || data[i] !== 0xff || data[i + 3] !== 0x01 || data[i + 4] !== 0x00) return null;
+  const fmtLen = data[i + 5] | (data[i + 6] << 8);
+  if (fmtLen > 120) return null;
+  const fmtEnd = i + 7 + fmtLen;
+  if (fmtEnd + 2 >= data.length) return null;
+  for (let k = i + 7; k < fmtEnd; k++) if (!isPrintable(data[k])) return null;
+  const msgLen = data[fmtEnd] | (data[fmtEnd + 1] << 8);
+  if (msgLen < 1 || msgLen > 600) return null;
+  const msgEnd = fmtEnd + 2 + msgLen;
+  if (msgEnd > data.length) return null;
+  for (let k = fmtEnd + 2; k < msgEnd; k++) if (!isPrintable(data[k])) return null;
+  return {
+    offset: i,
+    fmt: latin1(data, i + 7, fmtEnd),
+    msg: latin1(data, fmtEnd + 2, msgEnd),
+    end: msgEnd
+  };
+}
+
+function skipChannel(data, p, limit) {
+  if (p >= limit || data[p] < 0x80) return p;
+  p += 2;
+  let guard = 0;
+  while (p + 2 <= limit && guard < 4) {
+    const ln = data[p] | (data[p + 1] << 8);
+    if (ln === 0) return p + 2;
+    if (ln > 80 || p + 2 + ln > limit) return p;
+    p += 2 + ln;
+    guard++;
+  }
+  return p;
+}
+
+function readI32(data, p) {
+  if (p + 4 > data.length) return null;
+  const u = (data[p]) | (data[p + 1] << 8) | (data[p + 2] << 16) | (data[p + 3] << 24);
+  return u | 0;
+}
+
+function errorCodes(data) {
+  const found = [];
+  let i = 0;
+  while (i < data.length - 12) {
+    const rec = tryRecord(data, i);
+    if (!rec) { i++; continue; }
+    if (/error code|exited with:/.test(rec.msg) && /I32/.test(rec.fmt)) {
+      const p = skipChannel(data, rec.end, Math.min(data.length, rec.end + 80));
+      const code = readI32(data, p);
+      if (code !== null && code > -1000000 && code < 1000000) {
+        found.push({ offset: rec.offset, code, msg: rec.msg });
+      }
+    }
+    i = rec.end;
+  }
+  return found;
+}
+
+function namesAfter(data, offset) {
+  const end = Math.min(data.length, offset + 900);
+  let s = "";
+  for (let i = offset; i < end; i++) {
+    const b = data[i];
+    s += (b >= 32 && b < 127) ? String.fromCharCode(b) : "\n";
+  }
+  const names = [];
+  const re = /Name:\s*([^\n,]{3,90})/g;
+  let m;
+  while ((m = re.exec(s))) names.push(redact(m[1]).trim());
+  return names;
+}
+
+function collectStrings(data, fileName) {
+  const hits = [];
+  let run = -1;
+  const keep = (start, end) => {
+    if (end - start < 8 || end - start > 700) return;
+    const text = redact(latin1(data, start, end));
+    if (!text) return;
+    const interesting = /Authenticate succeeded|CLIENT_PRESENCE \(|ReserveService finished, conflicts|reserved by user|Reserve elements was successful|Send & Receive|ReceiveChanges entered|Get Partial changes was successful|SendChanges entered|put-changes:|Send changes was successful|SendChanges exited with error code|set-last-synchronized-revision: ok|Relative location found instead of absolute|GSException|\[path length\] == 0|unknown error \(OS errors|MountPointLocation is bigger|SourceMissing|Hotlink in File|I\/O NSException|rm-get-project: project,|https?:\/\/|thttp:\/\/|\.mod\b|\.pln\b|\.pla\b|\.bpn\b|OpenPlanCommand|Plan lock failed|ProjectOpeningFailed|OpenProcess:|ProjectOpener::|loginName %|\/Users\/[A-Za-z0-9._-]+\/Library|belonging to |downloaded=|missing=|Drawing Action: View:|Check Failed:|access denied|folder is not found|file is not found|creation of folder has failed|not a file was specified|Unmounting fixed|Autosave STEP|ProcessSaveRequest exited|lease found|GetPrefsPathThread failed|Open failed\.|\(\d+ ms\):|invocation-time=\d+ ms/.test(text);
+    if (!interesting) return;
+    const hit = { file: fileName, offset: start, text: decodeMaybe(text) };
+    if (/SourceMissing/.test(text)) hit.names = namesAfter(data, start);
+    hits.push(hit);
+  };
+  for (let i = 0; i < data.length; i++) {
+    if (isPrintable(data[i])) {
+      if (run < 0) run = i;
+    } else if (run >= 0) {
+      keep(run, i);
+      run = -1;
+    }
+  }
+  if (run >= 0) keep(run, data.length);
+  return hits;
+}
+
+function classify(text) {
+  for (const m of MILESTONES) if (m.re.test(text)) return m.kind;
+  return null;
+}
+
+function cleanExt(s) {
+  return String(s).replace(/\.(pln|pla|bpn|mod|ifc)[a-z]\b/ig, ".$1");
+}
+
+function extractProjectPath(text) {
+  const m = cleanExt(text).match(/(smb:\/\/.+?\.(?:pla|pln|bpn)|\/Volumes\/.+?\.(?:pla|pln|bpn)|\/Users\/.+?\.(?:pla|pln|bpn))/i);
+  return m ? m[1] : "";
+}
+
+function baseName(path) {
+  const parts = String(path).split(/[/\\]/);
+  return parts[parts.length - 1] || path;
+}
+
+function unique(list) {
+  const out = [];
+  const seen = new Set();
+  for (const item of list) {
+    const key = item.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+function hostOf(url) {
+  const m = String(url).match(/https?:\/\/([^/:]+)|thttp:\/\/([^/:]+)/i);
+  return (m && (m[1] || m[2])) || "";
+}
+
+function readF64(data, p) {
+  if (p + 8 > data.length) return null;
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  for (let i = 0; i < 8; i++) view.setUint8(i, data[p + i]);
+  const d = view.getFloat64(0, true);
+  if (!isFinite(d) || d < 0 || d > 6 * 3600) return null;
+  return d;
+}
+
+function fmtSec(sec) {
+  const s = Number(sec);
+  if (s >= 60) {
+    const m = Math.floor(s / 60);
+    const r = Math.round(s - m * 60);
+    return m + " min " + r + " s";
+  }
+  const tenths = Math.round(s * 10) / 10;
+  return tenths + " s";
+}
+
+function stepRaw(text) {
+  let s = text.replace(/\s+/g, " ").trim().replace(/ \/\d+$/, "").replace(/ STEP$/, "");
+  const m = s.match(/^(.*?) IN STEP WITH PARAMETERS\s*(.*)$/);
+  if (m) return (m[1].trim() + (m[2].trim() ? ": " + m[2].trim() : "")).slice(0, 180);
+  return s.slice(0, 180);
+}
+
+function humanStep(raw) {
+  const cut = raw.indexOf(": ");
+  const param = cut >= 0 ? raw.slice(cut + 2).trim() : "";
+  const head = cut >= 0 ? raw.slice(0, cut) : raw;
+  const rules = [
+    [/TreeItemDoubleClicked|Open S\/E/, "Opened a view"],
+    [/VP:3D/, "Updated a 3D view in the background"],
+    [/Background conversion/, "Updated a view in the background"],
+    [/DrawFloor/, "Redrew the floor plan"],
+    [/VersionConversion/, "Converted the file to this Archicad version"],
+    [/SetupEnvironment/, "Prepared the file for editing"],
+    [/CustomPostProcess/, "Finished opening the file"],
+    [/ChangeLibraries|EnumerateSymbols/, "Loaded libraries"],
+    [/CheckAndCorrect|CheckConsistency|CheckEditable/, "Ran the project consistency check"],
+    [/ProjectCreation/, "Created the project data"],
+    [/OpenPlanCommand|^Open File|^OpenProcess$|OpenFile/, "Opened the file"],
+    [/GetContent/, "Downloaded Teamwork content"],
+    [/Paste/, "Pasted elements"],
+    [/PanAndWheel/, "Panned or zoomed the view"],
+    [/ModulDrag|MergeHouse/, "Merged or dragged a module"],
+    [/layerUC/, "Changed the layer"],
+    [/scaleUC/, "Changed the scale"],
+    [/ProcessNotifications/, "Processed Teamwork notifications"],
+    [/Quit/, "Quit Archicad"],
+    [/SwitchToTab/, "Switched tabs"],
+    [/DeselectAll/, "Deselected everything"],
+    [/Save|Autosave/, "Saved the project"]
+  ];
+  let name = "";
+  for (let i = 0; i < rules.length; i++) {
+    if (rules[i][0].test(head) || rules[i][0].test(raw)) { name = rules[i][1]; break; }
+  }
+  if (!name) name = head.replace(/^.*::/, "").slice(0, 80);
+  let extra = param.replace(/,X+$/, "").slice(0, 90);
+  if (extra && name.toLowerCase().indexOf(extra.toLowerCase()) !== -1) extra = "";
+  return extra ? name + " — " + extra : name;
+}
+
+function familyOf(raw) {
+  if (/OpenPlan|Open File|OpenProcess|OpenFile|VersionConversion|ChangeLibraries|EnumerateSymbols|SetupEnvironment|CustomPostProcess|CheckAndCorrect|CheckConsistency|CheckEditable|ProjectCreation/.test(raw)) return "open";
+  if (/TW Project Save|SaveDatabase|SaveProcess|CreateSave|CreateAutoSave|Autosave|ProjectSaver::/.test(raw)) return "save";
+  return "";
+}
+
+function bestRaw(raws) {
+  const uniq = [];
+  raws.forEach((r) => { if (r && uniq.indexOf(r) < 0) uniq.push(r); });
+  const rank = (r) => {
+    if (/TreeItemDoubleClicked/.test(r)) return 100;
+    if (/^Open File/.test(r) || /^OpenPlanCommand/.test(r)) return 90;
+    if (/^Command:/.test(r)) return 80;
+    if (/Background conversion of a cache/.test(r)) return 70;
+    if (/^Background conversion/.test(r)) return 60;
+    if (/Open S\/E/.test(r)) return 55;
+    if (/DrawFloorPlan/.test(r)) return 50;
+    if (/GetContent/.test(r)) return 50;
+    return 10;
+  };
+  uniq.sort((a, b) => rank(b) - rank(a));
+  return uniq[0] || "";
+}
+
+function collectSlowSteps(data, fileName) {
+  const out = [];
+  let sawStep = false;
+  for (let i = 0; i < data.length - 12; i++) {
+    if (data[i] !== 0xff) continue;
+    const ln = data[i + 1] | (data[i + 2] << 8);
+    if (ln < 8 || ln > 300 || i + 3 + ln + 8 > data.length) continue;
+    let printable = true;
+    for (let k = 0; k < ln; k++) {
+      const b = data[i + 3 + k];
+      if (b < 32 || b >= 127) { printable = false; break; }
+    }
+    if (!printable) continue;
+    const text = latin1(data, i + 3, i + 3 + ln);
+    if (text.indexOf("STEP") === -1) continue;
+    sawStep = true;
+    const dur = readF64(data, i + 3 + ln);
+    if (dur !== null && dur >= 8) {
+      const raw = stepRaw(text);
+      if (!/^Quit|Command: Quit/.test(raw)) out.push({ file: fileName, offset: i, sec: dur, raw: raw });
+    }
+    i += 2 + ln;
+  }
+  return { steps: out, sawStep: sawStep };
+}
+
+function stringsAfter(data, offset, span) {
+  const end = Math.min(data.length, offset + span);
+  const out = [];
+  for (let i = offset; i < end - 4; i++) {
+    if (data[i] !== 0xff) continue;
+    const ln = data[i + 1] | (data[i + 2] << 8);
+    if (ln < 4 || ln > 120 || i + 3 + ln > data.length) continue;
+    let ok = true;
+    for (let k = 0; k < ln; k++) {
+      const b = data[i + 3 + k];
+      if (b < 32 || b >= 127) { ok = false; break; }
+    }
+    if (!ok) continue;
+    out.push(latin1(data, i + 3, i + 3 + ln));
+    i += 2 + ln;
+  }
+  return out;
+}
+
+function findBytes(data, needle, from) {
+  const n = needle.length;
+  for (let i = from; i <= data.length - n; i++) {
+    if (data[i] !== needle[0]) continue;
+    let ok = true;
+    for (let k = 1; k < n; k++) if (data[i + k] !== needle[k]) { ok = false; break; }
+    if (ok) return i;
+  }
+  return -1;
+}
+
+function asciiBytes(s) {
+  const a = [];
+  for (let i = 0; i < s.length; i++) a.push(s.charCodeAt(i));
+  return a;
+}
+
+function cleanWindow(s) {
+  const name = String(s).replace(/,X+$/, "").replace(/\s+/g, " ").trim();
+  if (name.length < 8 || name.length > 90) return "";
+  if (/[@/\\]|^0\. |GeneratedName|^Emb_|database\.fdb|\.lcf|Migration Library/.test(name)) return "";
+  if (!/[A-Za-z]{3}/.test(name)) return "";
+  return name;
+}
+
+function collectFileSignals(data, fileName) {
+  const aborts = [];
+  const windows = [];
+  const versions = {};
+  let host = 0;
+  const abortAt = asciiBytes("aborted on database");
+  const winAt = asciiBytes("WindowTopStatusLost");
+  const migAt = asciiBytes(" Migration Library");
+  const appAt = asciiBytes(".app");
+  const prefix = "Archicad ";
+  let i = 0;
+  while (i <= data.length - abortAt.length) {
+    const a = findBytes(data, abortAt, i);
+    if (a < 0) break;
+    const cmd = stringsAfter(data, a, 450).filter((s) => /Command$/.test(s) && s.length < 90 && s.indexOf(" ") < 0)[0] || "";
+    aborts.push({ file: fileName, command: cmd });
+    i = a + abortAt.length;
+  }
+  i = 0;
+  while (i <= data.length - winAt.length) {
+    const w = findBytes(data, winAt, i);
+    if (w < 0) break;
+    const strs = stringsAfter(data, w, 250);
+    let name = "";
+    for (let si = 0; si < strs.length; si++) {
+      name = cleanWindow(strs[si]);
+      if (name) break;
+    }
+    if (name) windows.push({ file: fileName, offset: w, name: name });
+    i = w + winAt.length;
+  }
+  i = 0;
+  while (i <= data.length - migAt.length) {
+    const m = findBytes(data, migAt, i);
+    if (m < 0) break;
+    let j = m - 1;
+    let num = "";
+    while (j >= 0 && data[j] >= 48 && data[j] <= 57) {
+      num = String.fromCharCode(data[j]) + num;
+      j--;
+    }
+    let ok = num.length > 0 && j + 1 >= prefix.length;
+    if (ok) {
+      for (let k = 0; k < prefix.length; k++) {
+        if (data[j + 1 - prefix.length + k] !== prefix.charCodeAt(k)) ok = false;
+      }
+    }
+    if (ok) versions[num] = true;
+    i = m + migAt.length;
+  }
+  i = 0;
+  while (i <= data.length - appAt.length) {
+    const p = findBytes(data, appAt, i);
+    if (p < 0) break;
+    let j = p - 1;
+    let num = "";
+    while (j >= 0 && data[j] >= 48 && data[j] <= 57) {
+      num = String.fromCharCode(data[j]) + num;
+      j--;
+    }
+    let okHost = num.length > 0 && j + 1 >= prefix.length;
+    if (okHost) {
+      for (let k = 0; k < prefix.length; k++) {
+        if (data[j + 1 - prefix.length + k] !== prefix.charCodeAt(k)) okHost = false;
+      }
+    }
+    const v = Number(num);
+    if (okHost && v >= 18 && v <= 40 && v > host) host = v;
+    i = p + appAt.length;
+  }
+  return {
+    aborts: aborts,
+    windows: windows,
+    versions: Object.keys(versions).map(Number).sort((a, b) => a - b),
+    host: host
+  };
+}
+
+function attachScreens(steps, windows) {
+  windows.forEach((w) => {
+    let best = null;
+    let bestDist = 80000;
+    steps.forEach((s) => {
+      if (s.file !== w.file) return;
+      const dist = Math.abs(s.offset - w.offset);
+      if (dist < bestDist) { bestDist = dist; best = s; }
+    });
+    if (!best) return;
+    if (!best.screen || bestDist < best.screenDist) {
+      best.screen = w.name;
+      best.screenDist = bestDist;
+    }
+  });
+}
+
+function summarizeSlow(steps) {
+  const tagged = steps.map((s) => ({ file: s.file, sec: s.sec, raw: s.raw, family: familyOf(s.raw), screen: s.screen || "" }));
+  const events = [];
+  const consumed = {};
+  const groups = {};
+  tagged.forEach((s, i) => {
+    if (s.family !== "open" && s.family !== "save") return;
+    const key = s.file + "|" + s.family;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(i);
+  });
+  Object.keys(groups).forEach((key) => {
+    const members = groups[key].map((i) => tagged[i]).sort((a, b) => b.sec - a.sec);
+    groups[key].forEach((i) => { consumed[i] = true; });
+    const head = members[0];
+    const aliasRaw = members.filter((m) => Math.abs(m.sec - head.sec) <= Math.max(0.5, head.sec * 0.04)).map((m) => m.raw);
+    const headLabel = humanStep(bestRaw(aliasRaw.concat([head.raw])));
+    const parts = [];
+    const seen = {};
+    members.forEach((m) => {
+      if (Math.abs(m.sec - head.sec) <= Math.max(0.5, head.sec * 0.04)) return;
+      const lab = humanStep(m.raw);
+      if (lab === headLabel || seen[lab]) return;
+      seen[lab] = true;
+      if (parts.length < 3) parts.push({ label: lab, sec: m.sec });
+    });
+    const screen = (members.map((m) => m.screen).filter(Boolean))[0] || "";
+    events.push({ sec: head.sec, label: headLabel, parts: parts, file: head.file, screen: screen });
+  });
+  tagged.forEach((s, i) => {
+    if (consumed[i]) return;
+    events.push({ sec: s.sec, label: humanStep(s.raw), parts: [], file: s.file, screen: s.screen || "" });
+  });
+  const byLabel = {};
+  events.forEach((e) => {
+    const prev = byLabel[e.label];
+    if (!prev || e.sec > prev.sec) {
+      if (prev && prev.screen && !e.screen) e.screen = prev.screen;
+      byLabel[e.label] = e;
+    } else if (!prev.screen && e.screen) prev.screen = e.screen;
+  });
+  return Object.keys(byLabel).map((k) => byLabel[k]).sort((a, b) => b.sec - a.sec).slice(0, 8);
+}
+
+function slowLine(e) {
+  let s = e.label + ": " + fmtSec(e.sec);
+  if (e.parts.length) s += ". Inside that: " + e.parts.map((p) => p.label + " " + fmtSec(p.sec)).join("; ");
+  if (e.screen && e.label.indexOf(e.screen) < 0) s += ". View on screen: " + e.screen;
+  return s;
+}
+
+function analyze(files) {
+  const ordered = files.slice().sort((a, b) => fileOrder(a.name) - fileOrder(b.name) || a.name.localeCompare(b.name));
+  const hits = [];
+  const codes = [];
+  const modified = [];
+  for (const file of ordered) {
+    const data = file.bytes;
+    if (file.lastModified) modified.push(file.lastModified);
+    const localHits = collectStrings(data, file.name);
+    hits.push(...localHits);
+    for (const c of errorCodes(data)) codes.push(Object.assign({ file: file.name }, c));
+  }
+
+  const presence = unique(hits.map((h) => {
+    const m = h.text.match(/CLIENT_PRESENCE \(([^)]+)\)/);
+    return m ? m[1] : "";
+  }).filter(Boolean));
+
+  const homes = unique(hits.map((h) => {
+    const m = h.text.match(/\/Users\/([^/]+)\/Library/);
+    return m ? m[1] : "";
+  }).filter((n) => n && n !== "Shared"));
+
+  const user = homes.sort((a, b) => hits.filter((h) => h.text.includes("/Users/" + b + "/")).length - hits.filter((h) => h.text.includes("/Users/" + a + "/")).length)[0] || presence[0] || "";
+
+  const projectHit = hits.find((h) => /rm-get-project: project,/.test(h.text));
+  const project = projectHit ? (projectHit.text.match(/project,([0-9A-Fa-f-]{36})/) || [])[1] || "" : "";
+
+  const hosts = unique(hits.map((h) => hostOf(h.text)).filter((h) => h && !/graphisoft\.com$/i.test(h)));
+  const server = hosts.find((h) => /bim|graphisoft|teamwork|:2200/i.test(h)) || hosts[0] || "";
+
+  const mods = unique(hits.filter((h) => /\.mod\b/i.test(h.text)).map((h) => {
+    const m = h.text.match(/(\/Volumes\/.+?\.mod)/i) || h.text.match(/([A-Za-z0-9_ .()'-]+\.mod)/i);
+    return m ? m[1].trim() : "";
+  })).slice(0, 8);
+
+  const missingNames = unique(hits.filter((h) => h.names && h.names.length).flatMap((h) => h.names)).slice(0, 12);
+
+  const mounts = unique(hits.filter((h) => /MountPointLocation is bigger/.test(h.text)).map((h) => h.text.slice(0, 280)));
+  const folderErrors = unique(hits.filter((h) => /unknown error \(OS errors/.test(h.text)).map((h) => h.text.slice(0, 240)));
+  const urlFolder = unique(hits.filter((h) => /tzg-bim|:22001/.test(h.text) && /http/i.test(h.text)).map((h) => {
+    const m = h.text.match(/https?:\/\/[^ \]"']+/i);
+    return m ? m[0] : "";
+  })).slice(0, 3);
+
+  const emailHit = hits.find((h) => /belonging to \S+@/.test(h.text));
+  const email = emailHit ? ((emailHit.text.match(/belonging to (\S+@\S+)/) || [])[1] || "").replace(/[|,].*$/, "") : "";
+
+  const lockHit = hits.find((h) => /Plan lock failed|ProjectOpeningFailed|OpenPlanCommand/.test(h.text));
+  const projectPaths = hits.map((h) => ({ hit: h, path: extractProjectPath(h.text) })).filter((x) => x.path);
+  let openedPath = "";
+  if (lockHit) {
+    const near = projectPaths.filter((x) => x.hit.file === lockHit.file && x.hit.offset >= lockHit.offset - 800 && x.hit.offset < lockHit.offset + 12000);
+    if (near.length) openedPath = near[0].path;
+  }
+  if (!openedPath) {
+    const smb = projectPaths.find((x) => x.path.indexOf("smb://") === 0);
+    openedPath = smb ? smb.path : (projectPaths[0] ? projectPaths[0].path : "");
+  }
+  const openedName = openedPath ? baseName(openedPath) : "";
+
+  const viewCounts = {};
+  const viewExamples = {};
+  hits.forEach((h) => {
+    const m = h.text.match(/Drawing Action: View:\s*([A-Za-z]+),(.+)/);
+    if (!m) return;
+    const type = m[1];
+    viewCounts[type] = (viewCounts[type] || 0) + 1;
+    const leaf = m[2].split("\\").pop().replace(/,.*/, "").trim();
+    if (!viewExamples[type]) viewExamples[type] = [];
+    if (leaf && viewExamples[type].length < 3 && viewExamples[type].indexOf(leaf) === -1) viewExamples[type].push(leaf);
+  });
+  const viewTotal = Object.keys(viewCounts).reduce((n, k) => n + viewCounts[k], 0);
+
+  let blobJobs = 0;
+  let blobsDownloaded = 0;
+  let blobsMissing = 0;
+  hits.forEach((h) => {
+    const m = h.text.match(/downloaded=(\d+),\s*missing=(\d+)/);
+    if (!m) return;
+    blobJobs += 1;
+    blobsDownloaded += Number(m[1]);
+    blobsMissing += Number(m[2]);
+  });
+
+  const openContinued = hits.some((h) => /OpenProcess:RefreshUserInterface|OpenProcess:CheckConsistency|ProjectOpener::Decompression/.test(h.text));
+  const planLock = hits.some((h) => /Plan lock failed|ProjectOpeningFailed/.test(h.text));
+  const startupFail = hits.some((h) => /GetPrefsPathThread failed|Open failed\./.test(h.text));
+  const autosave = hits.some((h) => /Autosave STEP|ProcessSaveRequest exited/.test(h.text));
+  const licenseOk = hits.some((h) => /lease found|Authenticate succeeded|Renew access token REST API call successful/.test(h.text));
+  const ioNoise = hits.filter((h) => /access denied|folder is not found|file is not found|creation of folder has failed|not a file was specified|Unmounting fixed virtual file system has failed/.test(h.text));
+  const ioOnProject = ioNoise.filter((h) => /\.(pln|pla|bpn|mod)\b|smb:\/\//i.test(h.text));
+
+  const flags = {
+    auth: hits.some((h) => /Authenticate succeeded/.test(h.text)),
+    reserveConflict: hits.some((h) => classify(h.text) === "reserve-conflict"),
+    reserveOk: hits.some((h) => classify(h.text) === "reserve-ok"),
+    sendRecv: hits.some((h) => classify(h.text) === "send-recv"),
+    receiveOk: hits.some((h) => classify(h.text) === "receive-ok"),
+    putOk: hits.some((h) => classify(h.text) === "put-ok"),
+    putFail: hits.some((h) => classify(h.text) === "put-fail"),
+    sendOk: hits.some((h) => classify(h.text) === "send-ok"),
+    syncOk: hits.some((h) => classify(h.text) === "sync-ok"),
+    relative: hits.some((h) => classify(h.text) === "relative"),
+    emptyPath: hits.some((h) => classify(h.text) === "empty-path"),
+    unknownFolder: hits.some((h) => classify(h.text) === "unknown-folder"),
+    mount: mounts.length > 0,
+    missing: missingNames.length > 0 || hits.some((h) => /SourceMissing/.test(h.text)),
+    hotlink: hits.some((h) => /Hotlink in File/.test(h.text)),
+    planLock: planLock,
+    openContinued: openContinued,
+    blobsMissing: blobsMissing > 0,
+    blobsOk: blobJobs > 0 && blobsMissing === 0,
+    autosave: autosave,
+    licenseOk: licenseOk,
+    startupFail: startupFail,
+    ioNoise: ioNoise.length > 0,
+    ioOnProject: ioOnProject.length > 0
+  };
+
+  const nonzero = codes.filter((c) => c.code !== 0);
+  flags.sendFailed = flags.putFail || nonzero.length > 0;
+
+  const slowSteps = [];
+  const aborts = [];
+  const windowHits = [];
+  const migrationSet = {};
+  let hostVersion = 0;
+  let sawStep = false;
+  for (let fi = 0; fi < ordered.length; fi++) {
+    const timed = collectSlowSteps(ordered[fi].bytes, ordered[fi].name);
+    if (timed.sawStep) sawStep = true;
+    for (let si = 0; si < timed.steps.length; si++) slowSteps.push(timed.steps[si]);
+    const signals = collectFileSignals(ordered[fi].bytes, ordered[fi].name);
+    for (let ai = 0; ai < signals.aborts.length; ai++) aborts.push(signals.aborts[ai]);
+    for (let wi = 0; wi < signals.windows.length; wi++) windowHits.push(signals.windows[wi]);
+    signals.versions.forEach((v) => { migrationSet[v] = true; });
+    if (signals.host > hostVersion) hostVersion = signals.host;
+  }
+  attachScreens(slowSteps, windowHits);
+  const slow = summarizeSlow(slowSteps);
+  const migrationVersions = Object.keys(migrationSet).map(Number).sort((a, b) => a - b);
+  const abortCommands = unique(aborts.map((a) => a.command).filter(Boolean));
+
+  const netCalls = [];
+  hits.forEach((h) => {
+    if (/eyJ|refresh_access_token|refresh_token/.test(h.text)) return;
+    let m = h.text.match(/([A-Za-z][A-Za-z0-9_.:-]{2,80}) \((\d+) ms\):\s*([A-Za-z]+)/);
+    if (m) {
+      const status = /^ok/i.test(m[3]) ? "ok" : m[3].toLowerCase();
+      const ms = Number(m[2]);
+      if (ms >= 5000 || status !== "ok") netCalls.push({ file: h.file, name: m[1], ms: ms, status: status });
+      return;
+    }
+    m = h.text.match(/([A-Za-z][A-Za-z0-9_.:-]{2,80}) invocation-time=(\d+) ms/);
+    if (m && Number(m[2]) >= 5000) netCalls.push({ file: h.file, name: m[1].replace(/^.*: /, "").replace(/:+$/, ""), ms: Number(m[2]), status: "ok" });
+  });
+  const netSeen = {};
+  const netSlow = [];
+  netCalls.forEach((c) => {
+    const key = c.name + "|" + c.status;
+    const prev = netSeen[key];
+    if (!prev || c.ms > prev.ms) netSeen[key] = c;
+  });
+  Object.keys(netSeen).forEach((k) => netSlow.push(netSeen[k]));
+  netSlow.sort((a, b) => b.ms - a.ms);
+
+  const checkFailed = unique(hits.map((h) => {
+    const m = h.text.match(/Check Failed:.*Name:\s*([^,]{3,90})/);
+    return m ? m[1].trim() : "";
+  }).filter(Boolean)).slice(0, 8);
+
+  const issues = [];
+  const quote = (pred, n) => hits.filter(pred).slice(0, n || 3).map((h) => h.file + " — " + h.text.slice(0, 260));
+
+  if (flags.reserveConflict) {
+    issues.push({
+      severity: "medium",
+      title: "Some elements were already reserved",
+      paragraphs: [
+        "Archicad asked the server for reservations and was told that at least one object was already reserved by someone else. The log line is ReserveService finished, conflicts, together with Object is reserved by user.",
+        flags.reserveOk
+          ? "The same session also recorded Reserve elements was successful. That means the objects this user was allowed to take were reserved. The conflict applies only to the objects someone else already held. Those objects are not included in this send."
+          : "This session did not record a successful reserve after the conflict, so the refused objects stayed with the other user.",
+        "A reservation conflict does not corrupt the project and it is not a network failure. The element stays on the server under the person who reserved it. The other people online in this session were " + (presence.filter((n) => n !== user).join(", ") || "not named") + "."
+      ],
+      evidence: quote((h) => /conflicts|reserved by user|Reserve elements was successful/.test(h.text), 4)
+    });
+  }
+
+  if (flags.sendOk || flags.putOk || flags.syncOk) {
+    issues.push({
+      severity: "ok",
+      title: "The server accepted the send",
+      paragraphs: [
+        "Send changes was successful" + (flags.putOk ? ", and project-manager-put-changes returned ok." : ".") + (flags.syncOk ? " The client then saved the synchronized revision, which is Archicad marking this local copy as caught up with that server revision." : ""),
+        "The upload calls in this log are short and return ok. There is no disconnect, timeout, or failed commit on the send itself. If someone still cannot see a change, it is the element that was not reserved, or a later receive on the other machine, not a dropped connection in this file.",
+        nonzero.length
+          ? "A send function also logged a non-zero error code (" + nonzero.map((c) => c.code).join(", ") + "). That is a real fault and is listed separately."
+          : "Where the log says exited with error code, the numeric code stored next to that line is 0. Archicad writes that sentence even when the code is 0."
+      ],
+      evidence: quote((h) => /put-changes: ok|Send changes was successful|set-last-synchronized-revision: ok|SendChanges exited with error code/.test(h.text), 4)
+    });
+  } else if (flags.sendFailed) {
+    issues.push({
+      severity: "high",
+      title: "The send did not finish cleanly",
+      paragraphs: [
+        "The log shows a Teamwork send that the server did not accept, or a send function that returned a non-zero code (" + (nonzero.map((c) => c.code).join(", ") || "see evidence") + ").",
+        "Until put-changes and Send changes was successful both appear, the revision on BIMcloud should be treated as unchanged by this attempt."
+      ],
+      evidence: quote((h) => /put-changes:|SendChanges exited|Send changes was/.test(h.text), 4)
+    });
+  }
+
+  if (flags.receiveOk) {
+    issues.push({
+      severity: "ok",
+      title: "A partial receive completed",
+      paragraphs: [
+        "Get Partial changes was successful. The client downloaded a delta from the server before or as part of Send & Receive. That is the receive half of the operation, and this log shows it finished.",
+        "A partial get is the normal Teamwork receive. It does not mean the file was only half saved."
+      ],
+      evidence: quote((h) => /Get Partial changes was successful|ReceiveChanges entered/.test(h.text), 2)
+    });
+  }
+
+  if (flags.relative || flags.emptyPath) {
+    issues.push({
+      severity: "medium",
+      title: "A linked path was empty or relative",
+      paragraphs: [
+        flags.relative
+          ? "GSExceptionWrongTypeOfLocation says Relative location found instead of absolute. Archicad expected a full location (a disk path or a proper Teamwork address) and found a relative one. In this session it is logged beside the send/save, and the send still continued."
+          : "",
+        flags.emptyPath
+          ? "GSExceptionInvalidPath says the path length is 0: something in the file points at a blank location. That is usually a drawing, library, or hotlink whose path was never filled in."
+          : "",
+        "These are local file-reference faults. They can leave one link unresolved. They are not damage to the project database." + ((flags.sendOk || flags.putOk) ? " In this log the server still accepted the send." : "")
+      ].filter(Boolean),
+      evidence: quote((h) => /Relative location|GSException|path length/.test(h.text), 4)
+    });
+  }
+
+  if (flags.hotlink && (flags.unknownFolder || urlFolder.length)) {
+    issues.push({
+      severity: "medium",
+      title: "Hotlink save tried to open the BIMcloud address as a folder",
+      paragraphs: [
+        "After the send, the local save runs a step named Hotlink in File. The log then says connection to a folder failed with an unknown OS error. The folder string is the BIMcloud host stored percent-encoded (" + (urlFolder[0] || "the server URL") + "), not a disk path.",
+        "Archicad is treating that server address as if it were a directory in the Teamwork cache (the lock file is @DataOptions.Lock under the local TW Data folder). The server upload had already returned ok. What failed is writing that hotlink back into the local cache.",
+        mods.length
+          ? "Module paths also appear in the session: " + mods.map((m) => m.split("/").slice(-2).join("/")).join("; ") + ". If those .mod files live on a file server, they only update when that volume is mounted."
+          : "No .mod path was captured next to this error. The failing location is the server URL used as a folder."
+      ],
+      evidence: quote((h) => /unknown error \(OS errors|Hotlink in File|DataOptions\.Lock|http%3A/.test(h.text), 4)
+    });
+  } else if (flags.unknownFolder) {
+    issues.push({
+      severity: "medium",
+      title: "A folder could not be opened",
+      paragraphs: [
+        "The log records connection to a folder failed with an unknown OS error. In this session that line is not tied to a Hotlink in File step.",
+        "It is a local path failure. It does not, by itself, mean the Teamwork upload was rejected."
+      ],
+      evidence: quote((h) => /unknown error \(OS errors/.test(h.text), 3)
+    });
+  }
+
+  if (flags.mount) {
+    issues.push({
+      severity: "medium",
+      title: "A file-server path did not map to a mounted volume",
+      paragraphs: [
+        "MountPointLocation is bigger than the path components, with mountPointLocation -1. Archicad had an smb:// path and could not match it to a volume mounted on this Mac.",
+        "Drawings and images on that share will not reload until the share is mounted at the path Archicad expects (often /Volumes/public for a tzg-server share). This does not block the Teamwork send of model elements. It does stop those linked files from updating.",
+        mounts[0] ? "The path in the log starts: " + mounts[0].replace(/^.*smb:\/\//, "smb://").slice(0, 220) : ""
+      ].filter(Boolean),
+      evidence: mounts.slice(0, 2).map((m) => m.slice(0, 300))
+    });
+  }
+
+  if (flags.planLock) {
+    issues.push({
+      severity: flags.openContinued ? "medium" : "high",
+      title: flags.openContinued ? "Plan lock failed, then the open continued" : "The project open failed on a plan lock",
+      paragraphs: [
+        "ProjectOpeningFailed records Plan lock failed in PlanIOPlanLock while opening a file. Archicad could not take the lock it wanted on that plan.",
+        openedName
+          ? "The file named next to that attempt is " + openedName + (openedPath.indexOf("smb://") === 0 ? ". It was read from the file server." : ".")
+          : "The log did not keep a readable file name next to the lock failure.",
+        flags.openContinued
+          ? "Decompression and later open steps still ran after the lock message, so this was not a hard stop. A lock failure on an archive or a teamwork file can mean another Archicad already has it open, or a leftover lock on the server share."
+          : "No later open step appears after the lock failure, so this attempt did not get the file open."
+      ],
+      evidence: quote((h) => /Plan lock failed|ProjectOpeningFailed|OpenPlanCommand/.test(h.text), 2).concat(openedPath ? [openedPath] : [])
+    });
+  }
+
+  if (flags.blobsMissing) {
+    issues.push({
+      severity: "medium",
+      title: "Some server library blobs were missing",
+      paragraphs: [
+        "Blob downloads from the BIMcloud host finished with missing items. Downloaded " + blobsDownloaded + ", missing " + blobsMissing + ", across " + blobJobs + " jobs.",
+        "Missing blobs are library or embedded parts the client asked for and did not get. Drawings that use those parts can come in incomplete. This is a content gap, not a damaged plan file."
+      ],
+      evidence: quote((h) => /missing=[1-9]/.test(h.text), 3)
+    });
+  }
+
+  if (viewTotal) {
+    const bits = Object.keys(viewCounts).sort((a, b) => viewCounts[b] - viewCounts[a]).map((k) => viewCounts[k] + " " + k);
+    const examples = [];
+    Object.keys(viewExamples).forEach((k) => {
+      viewExamples[k].forEach((name) => { if (examples.length < 8) examples.push(name); });
+    });
+    issues.push({
+      severity: "ok",
+      title: "Drawings the session actually touched",
+      paragraphs: [
+        "Drawing checks in the log cover " + viewTotal + " views: " + bits.join(", ") + ".",
+        examples.length ? "Examples: " + examples.join("; ") + "." : "",
+        "This is the part of the model that was opened or rebuilt in this session. A fault is more likely to involve these views than a view that was never loaded."
+      ].filter(Boolean),
+      evidence: []
+    });
+  }
+
+  if (flags.ioOnProject) {
+    issues.push({
+      severity: "medium",
+      title: "A project path could not be read",
+      paragraphs: [
+        "An I/O error names a project file or an smb path: file not found, folder not found, access denied, or the folder could not be created.",
+        "That is different from the ordinary misses on cache lock files. If the path is the plan or a module, that file was not available to this Mac."
+      ],
+      evidence: ioOnProject.slice(0, 3).map((h) => h.file + " — " + h.text.slice(0, 240))
+    });
+  } else if (flags.ioNoise) {
+    issues.push({
+      severity: "low",
+      title: "Ordinary local cache and lock misses",
+      paragraphs: [
+        "The log records file-not-found, folder-not-found, access denied, or a failed unmount. The paths are caches, PID locks, publisher folders, or preferences, not the plan file.",
+        flags.startupFail
+          ? "A preferences thread also logged Open failed / GetPrefsPathThread failed at startup. That thread is separate from opening the project."
+          : "These lines show up on a normal launch when a temp lock is already gone.",
+        "They are not evidence that the Teamwork file was damaged or that the network to BIMcloud failed."
+      ],
+      evidence: ioNoise.slice(0, 3).map((h) => h.file + " — " + h.text.slice(0, 220))
+    });
+  }
+
+  if (flags.missing) {
+    issues.push({
+      severity: "low",
+      title: "Linked drawings were missing",
+      paragraphs: [
+        "Drawing status checks reported SourceMissing. The placed file was not found at the stored path. Teamwork send still runs; the drawing stays empty or out of date on layouts that use it.",
+        missingNames.length
+          ? "Names captured from the log: " + missingNames.join("; ") + "."
+          : "The log recorded SourceMissing without a readable drawing name next to it."
+      ],
+      evidence: quote((h) => /SourceMissing/.test(h.text), 3)
+    });
+  }
+
+  if (aborts.length) {
+    issues.push({
+      severity: "medium",
+      title: "A database write was rolled back",
+      paragraphs: [
+        "The log records a read-write transaction that was aborted" + (aborts.length > 1 ? " (" + aborts.length + " times)" : "") + ". Archicad rolled that write back, so the change inside that transaction was not kept.",
+        abortCommands.length
+          ? "The command recorded beside the abort: " + abortCommands.join("; ") + "."
+          : "No command name was stored next to the abort.",
+        "This is a local database event. It is not, by itself, a BIMcloud send that the server rejected."
+      ],
+      evidence: aborts.slice(0, 4).map((a) => a.file + " — Read-write transaction aborted" + (a.command ? " beside " + a.command : ""))
+    });
+  }
+
+  if (migrationVersions.length) {
+    const older = hostVersion ? migrationVersions.filter((v) => v < hostVersion) : migrationVersions;
+    const listed = (older.length ? older : migrationVersions).join(", ");
+    issues.push({
+      severity: "low",
+      title: "An older migration library is still loaded",
+      paragraphs: [
+        "The session loaded migration libraries from Archicad " + listed + "." + (hostVersion ? " This log is from Archicad " + hostVersion + "." : "") + " Objects saved in those versions can show as missing even when the BIMcloud blob download reports nothing missing.",
+        "A migration library is a compatibility library. It is not damage to the plan, and it does not mean the server rejected a send."
+      ],
+      evidence: []
+    });
+  }
+
+  if (slow.length || netSlow.length || checkFailed.length) {
+    const slowest = slow.length ? slow[0].sec : 0;
+    const severity = (slowest >= 20 || netSlow.some((c) => c.status !== "ok" || c.ms >= 15000)) ? "medium" : "low";
+    const lines = slow.map(slowLine);
+    issues.push({
+      severity: severity,
+      title: "Steps that took a long time",
+      paragraphs: [
+        slow.length
+          ? "Archicad stores a duration on each profiler step. These are the steps in this log that ran for 8 seconds or more. A long step is a delay while a view opened, a drawing rebuilt, a file saved, or content downloaded. It is not, by itself, a failed send."
+          : "No profiler step in these files ran for 8 seconds or more."
+      ].concat(lines).concat([
+        netSlow.length
+          ? "Server calls that were slow or did not return ok: " + netSlow.slice(0, 5).map((c) => c.name + " " + fmtSec(c.ms / 1000) + (c.status !== "ok" ? " (" + c.status + ")" : "")).join("; ") + "."
+          : "No server call in these files took 5 seconds or returned a failure. A slow network would show up here as a long call time or a status other than ok.",
+        checkFailed.length
+          ? "Drawing checks failed for: " + checkFailed.join("; ") + ". The log records the drawing name. A failed check means that drawing was not updated. It does not name a broken model element."
+          : "No drawing check in these files failed by name.",
+        "The log does not list broken model elements. A consistency check, when it appears above, only means the checker ran. A damaged element would need a crash report, or a send the server rejected."
+      ]).filter(Boolean),
+      evidence: lines.slice(0, 8).concat(checkFailed.slice(0, 4).map((n) => "Check failed: " + n))
+    });
+  } else if (sawStep) {
+    issues.push({
+      severity: "ok",
+      title: "No long delays in these files",
+      paragraphs: [
+        "Profiler steps are present. None of them ran for 8 seconds or more, and no server call took 5 seconds or returned a failure.",
+        "The log does not list broken model elements by name. What it can show is a long view update, a slow or failed server call, or a drawing check that failed."
+      ],
+      evidence: []
+    });
+  }
+
+  const events = buildEvents(flags, {
+    user, server, project,
+    presence, missingNames, mounts, mods,
+    email, openedName, openedPath, viewCounts, viewTotal, viewExamples,
+    blobJobs, blobsDownloaded, blobsMissing,
+    slow, netSlow, checkFailed, sawStep,
+    aborts, abortCommands, migrationVersions, hostVersion
+  });
+  let lead = buildLead(flags, { user, server, openedName });
+  if (slow.length && slow[0].sec >= 15) {
+    lead += " Longest timed step: " + slow[0].label + ", " + fmtSec(slow[0].sec) + ".";
+  }
+  if (aborts.length) lead += " A database write was rolled back.";
+
+  let t0 = "";
+  let t1 = "";
+  if (modified.length) {
+    const min = Math.min.apply(null, modified);
+    const max = Math.max.apply(null, modified);
+    const fmt = (n) => new Date(n).toLocaleString();
+    t0 = fmt(min);
+    t1 = fmt(max);
+  }
+
+  return {
+    files: ordered.map((f) => f.name),
+    user, server, project, presence, flags, issues, events, lead, openedName, email,
+    timeRange: t0 && t1 ? (t0 === t1 ? t0 : t0 + " – " + t1) : "",
+    codes
+  };
+}
+
+function buildLead(flags, ctx) {
+  const who = ctx.user ? ctx.user + "'s" : "This";
+  const opened = ctx.openedName ? " File opened: " + ctx.openedName + "." : "";
+  if (flags.planLock && !flags.openContinued) {
+    return who + " Archicad did not get the plan open. The log records a plan lock failure." + opened;
+  }
+  if (flags.sendFailed && !flags.sendOk && !flags.putOk) {
+    return who + " Teamwork send did not complete. The log shows a failed upload or a non-zero send code." + opened;
+  }
+  if (flags.sendOk || flags.putOk) {
+    let s = who + " send reached the BIMcloud server.";
+    const bits = [];
+    if (flags.reserveConflict) bits.push("some reservations were refused");
+    if (flags.relative || flags.emptyPath || flags.unknownFolder || flags.mount) bits.push("local link paths failed while the copy was saved");
+    if (flags.missing) bits.push("some placed drawings were missing");
+    if (flags.planLock) bits.push("a plan lock failed while the file was opening");
+    if (flags.blobsMissing) bits.push("some library blobs were missing from the server");
+    if (bits.length) s += " Alongside that, " + bits.join(", ") + ".";
+    else s += " No reservation, path, or network fault stood out.";
+    return s + opened;
+  }
+  if (flags.reserveConflict) {
+    return who + " session hit a reservation conflict and did not record a finished Send & Receive." + opened;
+  }
+  if (ctx.openedName || flags.receiveOk) {
+    let s = who + " session";
+    if (ctx.openedName) s += " opened " + ctx.openedName;
+    if (flags.receiveOk) s += (ctx.openedName ? " and" : "") + " received changes from the server";
+    s += ". No finished send is in these files.";
+    if (flags.planLock && flags.openContinued) s += " A plan lock failed during the open, and the open still continued.";
+    return s;
+  }
+  return "These files do not contain a finished Teamwork send. What follows is everything in them that matches an open, a send, a receive, a reservation, or a broken link.";
+}
+
+function buildEvents(flags, ctx) {
+  const events = [];
+  if (ctx.user || ctx.email || ctx.server || ctx.project) {
+    events.push({
+      tone: "ok",
+      text: [
+        ctx.user ? "Signed-in user looks like " + ctx.user + (ctx.email ? " (" + ctx.email + ")" : "") + "." : (ctx.email ? "Account " + ctx.email + "." : ""),
+        ctx.server ? "Server " + ctx.server + "." : "",
+        ctx.project ? "Teamwork project id " + ctx.project + "." : ""
+      ].filter(Boolean).join(" ")
+    });
+  }
+  if (ctx.openedName) {
+    events.push({
+      tone: flags.planLock && !flags.openContinued ? "high" : "ok",
+      text: "Opened " + ctx.openedName + (ctx.openedPath && ctx.openedPath.indexOf("smb://") === 0 ? " from the file server." : ".")
+    });
+  }
+  if (flags.planLock) {
+    events.push({
+      tone: flags.openContinued ? "medium" : "high",
+      text: flags.openContinued
+        ? "Plan lock failed during that open. Decompression and later open steps still ran."
+        : "Plan lock failed and the open did not continue."
+    });
+  }
+  if (flags.licenseOk) {
+    events.push({ tone: "ok", text: "License check succeeded" + (ctx.email ? " for " + ctx.email : "") + "." });
+  }
+  if (flags.blobsOk) {
+    events.push({ tone: "ok", text: "Library blobs downloaded from the server (" + ctx.blobsDownloaded + " items, none missing)." });
+  }
+  if (flags.blobsMissing) {
+    events.push({ tone: "medium", text: "Library blob download was short " + ctx.blobsMissing + " item" + (ctx.blobsMissing === 1 ? "" : "s") + "." });
+  }
+  if (ctx.viewTotal) {
+    const bits = Object.keys(ctx.viewCounts).sort((a, b) => ctx.viewCounts[b] - ctx.viewCounts[a]).slice(0, 5).map((k) => ctx.viewCounts[k] + " " + k);
+    events.push({ tone: "ok", text: "Drawing checks covered " + ctx.viewTotal + " views (" + bits.join(", ") + ")." });
+  }
+  if (flags.autosave) {
+    events.push({ tone: "ok", text: "Autosave ran." });
+  }
+  if (ctx.presence.length) {
+    events.push({
+      tone: "ok",
+      text: "Online in this session: " + ctx.presence.join(", ") + "."
+    });
+  }
+  if (flags.reserveConflict || flags.reserveOk) {
+    events.push({
+      tone: flags.reserveConflict ? "medium" : "ok",
+      text: flags.reserveConflict
+        ? "Reserve was requested. At least one object was already reserved" + (flags.reserveOk ? ", and the objects this user could take were reserved." : ".")
+        : "Reserve elements completed."
+    });
+  }
+  if (flags.sendRecv) events.push({ tone: "ok", text: "Send & Receive ran." });
+  if (flags.receiveOk) events.push({ tone: "ok", text: "Partial changes were received from the server." });
+  if (flags.putOk || flags.sendOk) {
+    events.push({
+      tone: "ok",
+      text: "The server accepted the upload" + (flags.putOk ? " (put-changes ok)" : "") + (flags.sendOk ? " and logged Send changes was successful" : "") + "."
+    });
+  }
+  if (flags.syncOk) events.push({ tone: "ok", text: "The synchronized revision was saved on this machine." });
+  if (flags.sendFailed && !flags.sendOk) events.push({ tone: "high", text: "A send call failed or returned a non-zero code." });
+  if (flags.relative || flags.emptyPath) {
+    events.push({ tone: "medium", text: "A linked path was relative or empty during save. The send was not rolled back by this." });
+  }
+  if (flags.hotlink && flags.unknownFolder) {
+    events.push({ tone: "medium", text: "The local hotlink save could not open the BIMcloud address as a folder." + (ctx.mods.length ? " Modules named in the log include " + ctx.mods.map((m) => m.split("/").pop()).slice(0, 3).join(", ") + "." : "") });
+  } else if (flags.unknownFolder) {
+    events.push({ tone: "medium", text: "A folder could not be opened (unknown OS error)." });
+  } else if (flags.hotlink) {
+    events.push({ tone: "low", text: "A hotlink save step ran." + (ctx.mods.length ? " Modules named include " + ctx.mods.map((m) => m.split("/").pop()).slice(0, 3).join(", ") + "." : "") });
+  }
+  if (flags.mount) {
+    events.push({ tone: "medium", text: "An smb path on the file server did not match a mounted volume, so that linked file could not be read." });
+  }
+  if (flags.missing) {
+    events.push({ tone: "low", text: "Linked drawings reported missing" + (ctx.missingNames.length ? ": " + ctx.missingNames.slice(0, 4).join("; ") : "") + "." });
+  }
+  if (ctx.slow && ctx.slow.length) {
+    events.push({
+      tone: ctx.slow[0].sec >= 20 ? "medium" : "low",
+      text: "Long steps: " + ctx.slow.slice(0, 4).map((e) => e.label + " " + fmtSec(e.sec) + (e.screen && e.label.indexOf(e.screen) < 0 ? " (view on screen: " + e.screen + ")" : "")).join("; ") + "."
+    });
+  } else if (ctx.sawStep) {
+    events.push({ tone: "ok", text: "Timed steps in this log all finished under 8 seconds." });
+  }
+  if (ctx.netSlow && ctx.netSlow.length) {
+    const bad = ctx.netSlow.filter((c) => c.status !== "ok");
+    events.push({
+      tone: bad.length ? "medium" : "low",
+      text: (bad.length ? "A server call failed. " : "A server call was slow. ") + ctx.netSlow.slice(0, 3).map((c) => c.name + " " + fmtSec(c.ms / 1000) + (c.status !== "ok" ? " (" + c.status + ")" : "")).join("; ") + "."
+    });
+  }
+  if (ctx.aborts && ctx.aborts.length) {
+    events.push({
+      tone: "medium",
+      text: "A database write was rolled back" + (ctx.abortCommands.length ? " beside " + ctx.abortCommands.slice(0, 2).join("; ") : "") + "."
+    });
+  }
+  if (ctx.migrationVersions && ctx.migrationVersions.length) {
+    const older = ctx.hostVersion ? ctx.migrationVersions.filter((v) => v < ctx.hostVersion) : ctx.migrationVersions;
+    const listed = (older.length ? older : ctx.migrationVersions).join(", ");
+    events.push({
+      tone: "low",
+      text: "Migration libraries from Archicad " + listed + " are still loaded" + (ctx.hostVersion ? " in this Archicad " + ctx.hostVersion + " session" : "") + "."
+    });
+  }
+  if (ctx.checkFailed && ctx.checkFailed.length) {
+    events.push({
+      tone: "low",
+      text: "Drawing checks failed" + (ctx.checkFailed.length ? ": " + ctx.checkFailed.slice(0, 4).join("; ") : "") + "."
+    });
+  }
+  if (!events.length) {
+    events.push({ tone: "low", text: "No Teamwork send, reservation, or broken-link phrases were found. The file may be a quiet slice of a longer session." });
+  }
+  return events;
+}
+
+function render(report) {
+  const app = document.getElementById("app");
+  const facts = [
+    ["Files", String(report.files.length)],
+    ["User", report.email || report.user || "—"],
+    ["Opened", report.openedName || "—"],
+    ["Server", report.server || "—"]
+  ];
+  const issueHtml = report.issues.length
+    ? report.issues.map((issue) => `
+      <section class="issue">
+        <span class="tag ${esc(issue.severity)}">${esc(issue.severity === "ok" ? "recorded" : issue.severity)}</span>
+        <h3>${esc(issue.title)}</h3>
+        ${issue.paragraphs.map((p) => `<p>${esc(p)}</p>`).join("")}
+        ${issue.evidence && issue.evidence.length ? issue.evidence.map((e) => `<blockquote class="ev">${esc(e)}</blockquote>`).join("") : ""}
+      </section>`).join("")
+    : `<section class="issue"><h3>Nothing to describe</h3><p>No reservation, send, path, or missing-link pattern was found in the dropped files.</p></section>`;
+
+  app.innerHTML = `
+    <div class="tabs" role="tablist">
+      <button type="button" id="tab-simple" role="tab" aria-selected="true">Summary</button>
+      <button type="button" id="tab-full" role="tab" aria-selected="false">Full description</button>
+      <button type="button" class="noprint" id="printBtn">Print</button>
+    </div>
+    <article class="report">
+      <div class="pane" id="pane-simple">
+        <p class="lead">${esc(report.lead)}</p>
+        <div class="facts">
+          ${facts.map(([k, v]) => `<div class="fact"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("")}
+        </div>
+        ${report.project ? `<p class="note">Project id ${esc(report.project)}</p>` : ""}
+        <ol class="events">
+          ${report.events.map((e) => `<li><span class="tag ${esc(e.tone)}">${esc(e.tone === "ok" ? "event" : e.tone)}</span>${esc(e.text)}</li>`).join("")}
+        </ol>
+        <p class="note">Files, in order: ${esc(report.files.join(", "))}. FastLogger does not put a clock time on each line. The time above is when these files were last modified. Lines are in log order.</p>
+      </div>
+      <div class="pane hidden" id="pane-full">
+        <p class="lead">${esc(report.lead)}</p>
+        <p class="note">Each section is one pattern from the log, with what it means for the Teamwork file. Quotes are the readable strings taken out of the binary log.</p>
+        ${issueHtml}
+        <p class="note">A reservation clash, a missing drawing, or a bad hotlink path does not by itself mean the project file is damaged. Damage would show up as a crash report or a send that the server rejected. ${report.flags.sendOk || report.flags.putOk ? "This session’s upload was accepted." : "This session did not record an accepted upload."}</p>
+      </div>
+    </article>`;
+
+  const simple = document.getElementById("tab-simple");
+  const full = document.getElementById("tab-full");
+  const show = (which) => {
+    document.getElementById("pane-simple").classList.toggle("hidden", which !== "simple");
+    document.getElementById("pane-full").classList.toggle("hidden", which !== "full");
+    simple.setAttribute("aria-selected", which === "simple" ? "true" : "false");
+    full.setAttribute("aria-selected", which === "full" ? "true" : "false");
+  };
+  simple.onclick = () => show("simple");
+  full.onclick = () => show("full");
+  document.getElementById("printBtn").onclick = () => {
+    document.getElementById("pane-simple").classList.remove("hidden");
+    document.getElementById("pane-full").classList.remove("hidden");
+    window.print();
+  };
+}
+
+function looksLikeCrash(bytes) {
+  const head = latin1(bytes, 0, Math.min(bytes.length, 80));
+  return head.indexOf("<crash") !== -1 || head.indexOf("<exitcause>") !== -1;
+}
+
+function crashNote(name) {
+  return {
+    files: [name],
+    user: "",
+    server: "",
+    project: "",
+    presence: [],
+    flags: {},
+    lead: name + " is an Archicad crash report (.rpt), not a FastLogger session log. Drop the Log-*.log files from the FastLogger folder for a Teamwork send summary.",
+    events: [{ tone: "low", text: "Crash reports are XML. This page reads the binary FastLogger logs (Log-########.log)." }],
+    issues: [],
+    timeRange: "",
+    codes: []
+  };
+}
+
+async function readFiles(fileList) {
+  const out = [];
+  for (const file of fileList) {
+    const buf = await file.arrayBuffer();
+    out.push({ name: file.name, lastModified: file.lastModified, bytes: new Uint8Array(buf) });
+  }
+  const crash = out.find((f) => looksLikeCrash(f.bytes));
+  if (crash && out.length === 1) {
+    render(crashNote(crash.name));
+    return;
+  }
+  const logs = out.filter((f) => !looksLikeCrash(f.bytes));
+  render(analyze(logs));
+}
+
+function boot() {
+  const drop = document.getElementById("drop");
+  const picker = document.getElementById("picker");
+  picker.addEventListener("change", () => { if (picker.files.length) readFiles(picker.files); });
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    if (e.dataTransfer.files.length) readFiles(e.dataTransfer.files);
+  });
+  document.getElementById("sampleHint").onclick = () => {
+    alert("Summary: who was online, whether Send & Receive reached the server, long steps, a rolled-back write, an old migration library, and the main faults in order.\n\nFull description: each fault, plus any step that ran for 8 seconds or more and the view on screen when that step was near a window change.\n\nThe original log is not modified.");
+  };
+}
+
+if (typeof document !== "undefined") boot();
+</script>
+</body>
+</html>
