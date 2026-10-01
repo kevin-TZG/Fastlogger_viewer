@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solar Access Report</title>
+  <style>
+    :root {
+      --ink: #1b2433;
+      --muted: #5c6674;
+      --line: #d8d2c6;
+      --paper: #f6f2ea;
+      --card: #fffdf8;
+      --navy: #1c2f4a;
+      --gold: #e3b23c;
+      --gold-deep: #c9921a;
+      --after: #3d8b74;
+      --after-deep: #2a6b58;
+      --pass: #1f7a45;
+      --pass-bg: #d8f0e0;
+      --fail: #b42318;
+      --fail-bg: #f8d4d0;
+      --track: #ebe4d6;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.45;
+    }
+
+    .page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 28px 64px;
+    }
+
+    header.app-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 22px;
+    }
+
+    .brand h1 {
+      margin: 0 0 4px;
+      font-family: Georgia, "Iowan Old Style", serif;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    button, .file-btn, .threshold {
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    button.primary, .file-btn.primary {
+      background: var(--navy);
+      color: #fff;
+      border-color: var(--navy);
+    }
+
+    button:disabled { opacity: 0.45; cursor: default; }
+    .file-btn input { display: none; }
+
+    .threshold {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: default;
+    }
+
+    .threshold input {
+      width: 64px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 4px 6px;
+      font: inherit;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .meta article {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .meta .label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .meta .value {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .drop {
+      border: 1px dashed #c9c1b2;
+      border-radius: 12px;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(255,255,255,0.5);
+    }
+
+    .table-wrap {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+      text-align: left;
+    }
+
+    th {
+      background: #f3eee4;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    td.num { font-variant-numeric: tabular-nums; font-weight: 600; }
+    td.id { font-weight: 700; white-space: nowrap; }
+    td.orient { width: 88px; }
+    td.hours { width: 120px; }
+    td.comp { width: 110px; text-align: center; font-weight: 700; }
+    td.bar { min-width: 420px; }
+
+    tr.pair-a td { background: #fffdf8; }
+    tr.pair-b td { background: #f4f8f6; }
+    tr.pair-a td.id, tr.pair-b td.id { background: inherit; }
+
+    .chip {
+      display: inline-block;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 999px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .chip.before { background: #f3e2b3; color: #6a4d00; }
+    .chip.after { background: #cfe7df; color: #1d5b47; }
+
+    td.comp-yes, tr.pair-a td.comp-yes, tr.pair-b td.comp-yes {
+      background: #1f7a45;
+      color: #fff;
+    }
+    td.comp-no, tr.pair-a td.comp-no, tr.pair-b td.comp-no {
+      background: #b42318;
+      color: #fff;
+    }
+    td.comp-empty, tr.pair-a td.comp-empty, tr.pair-b td.comp-empty {
+      color: #b3aba0;
+      font-weight: 500;
+      background: #f4efe6;
+    }
+
+    .track-wrap { padding: 6px 0 2px; }
+    .track {
+      position: relative;
+      height: 34px;
+      background: var(--track);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .seg {
+      position: absolute;
+      top: 5px;
+      height: 24px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #3a2800;
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 2px;
+    }
+
+    .seg.before { background: linear-gradient(180deg, #f2c44d, var(--gold-deep)); }
+    .seg.after { background: linear-gradient(180deg, #63c3a6, var(--after-deep)); color: #073328; }
+
+    .axis {
+      position: relative;
+      height: 28px;
+      margin-top: 2px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .tick {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    .tick.start { transform: none; left: 0; }
+    .tick.end { transform: none; right: 0; left: auto; }
+    .tick.mid { color: var(--ink); font-weight: 600; }
+    .tick.alt { top: 13px; }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      margin: 12px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+
+    .swatch.before { background: var(--gold); }
+    .swatch.after { background: var(--after); }
+
+    .status { margin-top: 10px; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 900px) {
+      .meta { grid-template-columns: 1fr 1fr; }
+      header.app-bar { flex-direction: column; }
+      .controls { justify-content: flex-start; }
+    }
+
+    @media print {
+      @page { size: A4 landscape; margin: 6mm; }
+      html, body { background: #fff; height: auto; }
+      .controls, .drop, .status, .legend, .brand p { display: none !important; }
+      .page {
+        max-width: none;
+        padding: 0;
+        transform-origin: top left;
+      }
+      .brand h1 { font-size: 16px; margin-bottom: 6px; }
+      .meta { gap: 6px; margin-bottom: 8px; }
+      .meta article { padding: 6px 8px; }
+      .meta .value { font-size: 11px; }
+      .table-wrap { border: none; overflow: visible; }
+      table { min-width: 0; font-size: 9px; }
+      th, td { padding: 3px 5px; }
+      th { position: static; font-size: 8px; }
+      .track { height: 20px; }
+      .seg { top: 3px; height: 14px; font-size: 8px; }
+      .axis { height: 22px; font-size: 7px; }
+      .tick.alt { top: 10px; }
+      .chip { transform: scale(0.9); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="app-bar">
+      <div class="brand">
+        <h1>Solar Access Report</h1>
+        <p>Import a SunStudyEOTS or MCP export. Add a second CSV to compare Before / After by Property ID.</p>
+      </div>
+      <div class="controls">
+        <label class="file-btn primary">
+          Import Data A
+          <input id="fileA" type="file" accept=".csv,text/csv" multiple />
+        </label>
+        <label class="file-btn">
+          Import Data B
+          <input id="fileB" type="file" accept=".csv,text/csv" multiple />
+        </label>
+        <button id="clearB" type="button" disabled>Clear Data B</button>
+        <label class="threshold">
+          Compliance
+          <input id="threshold" type="number" min="0" step="5" value="120" />
+          mins
+        </label>
+        <button id="printBtn" type="button">Print / PDF</button>
+      </div>
+    </header>
+
+    <section class="meta" id="meta" hidden></section>
+    <div class="drop" id="empty">No data loaded yet. Import Data A (Before), or import both CSVs to compare the same Property IDs.</div>
+    <div class="table-wrap" id="tableWrap" hidden>
+      <table>
+        <thead>
+          <tr>
+            <th>Property ID</th>
+            <th>Orientation</th>
+            <th>Hours of sun (mins)</th>
+            <th>Daylight</th>
+            <th>Compliance</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="legend" id="legend" hidden>
+      <span><i class="swatch before"></i>Daylight — Data A (Before)</span>
+      <span id="legendB"><i class="swatch after"></i>Daylight — Data B (After)</span>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+<script>
+(function () {
+  const COMPLIANCE_DEFAULT = 120;
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  const state = {
+    dataA: null,
+    dataB: null,
+    threshold: COMPLIANCE_DEFAULT
+  };
+
+  const els = {
+    fileA: document.getElementById("fileA"),
+    fileB: document.getElementById("fileB"),
+    clearB: document.getElementById("clearB"),
+    threshold: document.getElementById("threshold"),
+    printBtn: document.getElementById("printBtn"),
+    meta: document.getElementById("meta"),
+    empty: document.getElementById("empty"),
+    tableWrap: document.getElementById("tableWrap"),
+    tbody: document.getElementById("tbody"),
+    legend: document.getElementById("legend"),
+    legendB: document.getElementById("legendB"),
+    status: document.getElementById("status")
+  };
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  function parseClock(value) {
+    if (value == null) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const iso = raw.match(/T(\d{1,2}):(\d{2})/);
+    if (iso) return Number(iso[1]) * 60 + Number(iso[2]);
+    const ampm = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]m)$/i);
+    if (ampm) {
+      let h = Number(ampm[1]) % 12;
+      if (/pm/i.test(ampm[3])) h += 12;
+      return h * 60 + Number(ampm[2] || 0);
+    }
+    const hm = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+    return null;
+  }
+
+  function formatClock(mins, compact) {
+    if (mins == null || Number.isNaN(mins)) return "—";
+    const m = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
+    let h = Math.floor(m / 60);
+    const mm = m % 60;
+    const suffix = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    if (compact && mm === 0) return `${h12}${suffix}`;
+    return `${h12}:${pad2(mm)} ${suffix}`;
+  }
+
+  function ordinal(n) {
+    const v = n % 100;
+    if (v >= 11 && v <= 13) return `${n}th`;
+    switch (n % 10) {
+      case 1: return `${n}st`;
+      case 2: return `${n}nd`;
+      case 3: return `${n}rd`;
+      default: return `${n}th`;
+    }
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "—";
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso;
+    const day = Number(m[3]);
+    const month = MONTHS[Number(m[2]) - 1] || m[2];
+    return `${ordinal(day)} ${month} ${m[1]}`;
+  }
+
+  function parseCsv(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let quoted = false;
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (quoted) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { field += '"'; i += 1; }
+          else quoted = false;
+        } else field += ch;
+      } else if (ch === '"') {
+        quoted = true;
+      } else if (ch === ",") {
+        row.push(field);
+        field = "";
+      } else if (ch === "\n") {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = "";
+      } else if (ch !== "\r") {
+        field += ch;
+      }
+    }
+    if (field.length || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows.filter((r) => r.some((c) => String(c).trim() !== ""));
+  }
+
+  function normHeader(name) {
+    return String(name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  }
+
+  function isTimeHeader(name) {
+    return parseClock(name) != null && /^\d{1,2}:\d{2}$/.test(String(name).trim());
+  }
+
+  function parseMetaComments(text) {
+    const meta = {};
+    text.split(/\r?\n/).forEach((line) => {
+      const m = line.match(/^#\s*([a-z0-9_]+)\s*=\s*(.*)$/i);
+      if (m) meta[m[1].toLowerCase()] = m[2].trim();
+    });
+    return meta;
+  }
+
+  function cellLit(value) {
+    const raw = String(value == null ? "" : value).trim();
+    if (!raw) return false;
+    if (/^(yes|true|y)$/i.test(raw)) return true;
+    if (/^(no|false|n)$/i.test(raw)) return false;
+    const frac = raw.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (frac) return Number(frac[1]) > 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0;
+  }
+
+  function inferInterval(times, fallback) {
+    if (times.length >= 2) {
+      const step = times[1] - times[0];
+      if (step > 0) return step;
+    }
+    return fallback || 5;
+  }
+
+  function segmentsFromFlags(times, flags, interval) {
+    const segs = [];
+    let cur = null;
+    times.forEach((t, i) => {
+      if (flags[i]) {
+        if (!cur) cur = { start: t, end: t, minutes: 0 };
+        cur.end = t;
+        cur.minutes += interval;
+      } else if (cur) {
+        segs.push(cur);
+        cur = null;
+      }
+    });
+    if (cur) segs.push(cur);
+    return segs;
+  }
+
+  function emptyDataset(label, fileNames) {
+    return {
+      label,
+      fileNames,
+      meta: {},
+      rows: [],
+      byId: new Map()
+    };
+  }
+
+  function finalizeFromFlags(row) {
+    if (!row.times || !row.flags) return;
+    row.segments = segmentsFromFlags(row.times, row.flags, row.interval || 5);
+    row.minutes = row.segments.reduce((sum, seg) => sum + seg.minutes, 0);
+  }
+
+  function mergeOrientation(existing, incoming) {
+    const parts = new Set(String(existing || "").split("/").map((s) => s.trim()).filter(Boolean));
+    String(incoming || "").split("/").forEach((s) => {
+      if (s.trim()) parts.add(s.trim());
+    });
+    return [...parts].join("/");
+  }
+
+  function applyRow(ds, row) {
+    const id = row.id;
+    const prev = ds.byId.get(id);
+    if (!prev) {
+      finalizeFromFlags(row);
+      ds.rows.push(row);
+      ds.byId.set(id, row);
+      return;
+    }
+    if (row.orientation) prev.orientation = mergeOrientation(prev.orientation, row.orientation);
+    if (prev.flags && row.flags && prev.flags.length === row.flags.length) {
+      prev.flags = prev.flags.map((flag, i) => flag || row.flags[i]);
+      finalizeFromFlags(prev);
+    } else if (row.fromTimeseries) {
+      prev.minutes = row.minutes;
+      if (row.segments) prev.segments = row.segments;
+    } else if (!prev.segments || !prev.segments.length) {
+      if (row.segments && row.segments.length) prev.segments = row.segments;
+      if (row.minutes) prev.minutes = row.minutes;
+    }
+    if (row.samples && row.samples.length) prev.samples = row.samples;
+  }
+
+  function mergeMeta(ds, extra) {
+    Object.keys(extra || {}).forEach((key) => {
+      if (extra[key] !== "" && extra[key] != null && (ds.meta[key] == null || ds.meta[key] === "")) {
+        ds.meta[key] = extra[key];
+      }
+    });
+  }
+
+  function parseTimeseries(ds, headers, records) {
+    const idx = {};
+    headers.forEach((h, i) => { idx[normHeader(h)] = i; });
+    const idCol = idx.window_id ?? idx.opening ?? idx.property_id ?? idx.element_id;
+    const timeCol = idx.datetime_local ?? idx.datetime ?? idx.time;
+    const sunCol = idx.any_direct_sun ?? idx.yes ?? idx.has_access;
+    if (idCol == null || timeCol == null || sunCol == null) return false;
+
+    const grouped = new Map();
+    records.forEach((cells) => {
+      const id = String(cells[idCol] || "").trim();
+      const t = parseClock(cells[timeCol]);
+      if (!id || t == null) return;
+      if (!grouped.has(id)) grouped.set(id, []);
+      grouped.get(id).push({ t, lit: cellLit(cells[sunCol]) });
+    });
+
+    let interval = 0;
+    grouped.forEach((samples, id) => {
+      samples.sort((a, b) => a.t - b.t);
+      if (!interval && samples.length >= 2) interval = samples[1].t - samples[0].t;
+      const step = interval || 1;
+      const times = samples.map((s) => s.t);
+      const flags = samples.map((s) => s.lit);
+      const segs = segmentsFromFlags(times, flags, step);
+      const minutes = segs.reduce((sum, s) => sum + s.minutes, 0);
+      applyRow(ds, {
+        id,
+        orientation: "",
+        minutes,
+        segments: segs,
+        fromTimeseries: true
+      });
+      if (!ds.meta.start_time) ds.meta.start_time = formatHm(times[0]);
+      if (!ds.meta.end_time) ds.meta.end_time = formatHm(times[times.length - 1]);
+      const dateMatch = String(records[0][timeCol] || "").match(/^(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch && !ds.meta.analysis_date) ds.meta.analysis_date = dateMatch[1];
+    });
+    if (interval) ds.meta.interval_minutes = String(interval);
+    return true;
+  }
+
+  function formatHm(mins) {
+    if (mins == null) return "";
+    return `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`;
+  }
+
+  function parseSummaryOrEots(ds, headers, records) {
+    const names = headers.map(normHeader);
+    const timeIdx = [];
+    headers.forEach((h, i) => { if (isTimeHeader(h)) timeIdx.push(i); });
+
+    const col = (aliases) => {
+      for (const alias of aliases) {
+        const i = names.indexOf(alias);
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+
+    const idCol = col(["opening", "window_id", "property_id", "element_id", "id"]);
+    if (idCol < 0) return false;
+    const dirCol = col(["direction", "facing", "orientation"]);
+    const minCol = col(["yes_min", "yes_(min)", "hours_of_sun_mins", "any_direct_sun_minutes", "yes_minutes"]);
+    const firstCol = col(["first_sun"]);
+    const lastCol = col(["last_sun"]);
+    const dateCol = col(["date"]);
+    const startCol = col(["start"]);
+    const endCol = col(["end"]);
+    const latCol = col(["latitude"]);
+    const lonCol = col(["longitude"]);
+    const locCol = col(["site_address", "project_location"]);
+    const intervalHint = Number(ds.meta.interval_minutes) || 0;
+    const times = timeIdx.map((i) => parseClock(headers[i]));
+    const interval = inferInterval(times, intervalHint || 5);
+
+    if (records[0]) {
+      if (dateCol >= 0 && !ds.meta.analysis_date) ds.meta.analysis_date = records[0][dateCol];
+      if (startCol >= 0 && !ds.meta.start_time) ds.meta.start_time = records[0][startCol];
+      if (endCol >= 0 && !ds.meta.end_time) ds.meta.end_time = records[0][endCol];
+      if (latCol >= 0 && !ds.meta.latitude) ds.meta.latitude = records[0][latCol];
+      if (lonCol >= 0 && !ds.meta.longitude) ds.meta.longitude = records[0][lonCol];
+      if (locCol >= 0 && !ds.meta.project_location) ds.meta.project_location = records[0][locCol];
+    }
+    if (times.length && !ds.meta.start_time) ds.meta.start_time = formatHm(times[0]);
+    if (times.length && !ds.meta.end_time) ds.meta.end_time = formatHm(times[times.length - 1]);
+    if (timeIdx.length) ds.meta.interval_minutes = String(interval);
+
+    records.forEach((cells) => {
+      const id = String(cells[idCol] || "").trim();
+      if (!id) return;
+      let minutes = minCol >= 0 ? Number(cells[minCol]) : NaN;
+      let segments = [];
+      let flags = null;
+      if (timeIdx.length) {
+        flags = timeIdx.map((i) => cellLit(cells[i]));
+        segments = segmentsFromFlags(times, flags, interval);
+        minutes = segments.reduce((s, seg) => s + seg.minutes, 0);
+      } else if (firstCol >= 0 && lastCol >= 0) {
+        const a = parseClock(cells[firstCol]);
+        const b = parseClock(cells[lastCol]);
+        if (a != null && b != null && b >= a) {
+          const span = Number.isFinite(minutes) && minutes > 0 ? minutes : (b - a);
+          segments = [{ start: a, end: b, minutes: span }];
+          if (!Number.isFinite(minutes) || minutes === 0) minutes = span;
+        }
+      }
+      if (!Number.isFinite(minutes)) minutes = 0;
+      applyRow(ds, {
+        id,
+        orientation: dirCol >= 0 ? String(cells[dirCol] || "").trim() : "",
+        minutes,
+        segments,
+        times: timeIdx.length ? times : null,
+        flags,
+        interval
+      });
+    });
+    return true;
+  }
+
+  function parseDataset(files) {
+    const ds = emptyDataset(files[0] && files[0].kind === "B" ? "After" : "Before", files.map((f) => f.name));
+    files.forEach((file) => {
+      mergeMeta(ds, parseMetaComments(file.text));
+      const lines = file.text.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"));
+      if (!lines.length) return;
+      const table = parseCsv(lines.join("\n"));
+      if (!table.length) return;
+      const headers = table[0];
+      const records = table.slice(1);
+      const names = headers.map(normHeader);
+      const isTs = names.includes("datetime_local") || (names.includes("datetime") && names.includes("window_id"));
+      if (isTs) parseTimeseries(ds, headers, records);
+      else parseSummaryOrEots(ds, headers, records);
+    });
+    if (!ds.meta.project_name) ds.meta.project_name = "";
+    return ds;
+  }
+
+  function analysisWindow() {
+    const mins = [];
+    [state.dataA, state.dataB].forEach((ds) => {
+      if (!ds) return;
+      const start = parseClock(ds.meta.start_time);
+      const end = parseClock(ds.meta.end_time);
+      if (start != null) mins.push(start);
+      if (end != null) mins.push(end);
+      ds.rows.forEach((row) => {
+        (row.segments || []).forEach((seg) => {
+          mins.push(seg.start, seg.end);
+        });
+      });
+    });
+    if (!mins.length) return { start: 9 * 60, end: 15 * 60 };
+    return { start: Math.min(...mins), end: Math.max(...mins) };
+  }
+
+  function chosenMeta() {
+    const a = state.dataA ? state.dataA.meta : {};
+    const b = state.dataB ? state.dataB.meta : {};
+    const pick = (key) => a[key] || b[key] || "";
+    return {
+      project_name: pick("project_name"),
+      project_location: pick("project_location") || formatLatLon(pick("latitude"), pick("longitude")),
+      latitude: pick("latitude"),
+      longitude: pick("longitude"),
+      analysis_date: pick("analysis_date"),
+      start_time: pick("start_time"),
+      end_time: pick("end_time"),
+      interval_minutes: pick("interval_minutes")
+    };
+  }
+
+  function formatLatLon(lat, lon) {
+    if (lat === "" || lon === "" || lat == null || lon == null) return "";
+    const a = Number(lat);
+    const b = Number(lon);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || (a === 0 && b === 0)) return "";
+    const ns = a < 0 ? "S" : "N";
+    const ew = b < 0 ? "W" : "E";
+    return `${Math.abs(a).toFixed(4)}°${ns}, ${Math.abs(b).toFixed(4)}°${ew}`;
+  }
+
+  function analysisCopy(meta) {
+    const date = formatDate(meta.analysis_date);
+    const start = formatClock(parseClock(meta.start_time), true);
+    const end = formatClock(parseClock(meta.end_time), true);
+    const interval = meta.interval_minutes ? `${meta.interval_minutes} min intervals` : "";
+    if (date === "—" && start === "—" && end === "—") return "—";
+    const range = (start !== "—" && end !== "—") ? `${date} from ${start}–${end}` : date;
+    return interval ? `${range}. ${interval}` : range;
+  }
+
+  function pct(value, start, end) {
+    const span = Math.max(end - start, 1);
+    return `${((value - start) / span) * 100}%`;
+  }
+
+  function renderBar(row, kind, window) {
+    const segs = row.segments || [];
+    const segHtml = segs.map((seg) => {
+      const left = pct(seg.start, window.start, window.end);
+      const width = pct(window.start + Math.max(seg.end - seg.start, 1), window.start, window.end);
+      const narrow = ((seg.end - seg.start) / Math.max(window.end - window.start, 1)) < 0.08;
+      const label = narrow ? `${seg.minutes}` : `${seg.minutes} min`;
+      return `<div class="seg ${kind}" style="left:${left};width:${width}" title="${formatClock(seg.start)} – ${formatClock(seg.end)}">${label}</div>`;
+    }).join("");
+
+    const tickItems = [
+      { t: window.start, label: formatClock(window.start, true), kind: "start" },
+      { t: window.end, label: formatClock(window.end, true), kind: "end" }
+    ];
+    segs.forEach((seg) => {
+      tickItems.push({ t: seg.start, label: formatClock(seg.start), kind: "mid" });
+      if (seg.end !== seg.start) tickItems.push({ t: seg.end, label: formatClock(seg.end), kind: "mid" });
+    });
+    tickItems.sort((a, b) => a.t - b.t || (a.kind === "mid" ? 1 : -1));
+    const kept = [];
+    tickItems.forEach((item) => {
+      const same = kept.find((other) => other.t === item.t);
+      if (same) {
+        if (item.kind === "mid") return;
+        if (same.kind === "mid") kept.splice(kept.indexOf(same), 1);
+      }
+      kept.push(item);
+    });
+    const ticks = kept.map((item, i) => {
+      const alt = i % 2 === 1 ? " alt" : "";
+      if (item.kind === "start") return `<span class="tick start${alt}">${item.label}</span>`;
+      if (item.kind === "end") return `<span class="tick end${alt}">${item.label}</span>`;
+      return `<span class="tick mid${alt}" style="left:${pct(item.t, window.start, window.end)}">${item.label}</span>`;
+    });
+
+    return `<div class="track-wrap"><div class="track">${segHtml}</div><div class="axis">${ticks.join("")}</div></div>`;
+  }
+
+  function complianceCell(mode, rowA, rowB) {
+    if (mode === "hidden") return `<td class="comp comp-empty">—</td>`;
+    if (mode === "compare") {
+      const a = rowA ? rowA.minutes : 0;
+      const b = rowB ? rowB.minutes : 0;
+      const ok = b >= a || b >= state.threshold;
+      return `<td class="comp ${ok ? "comp-yes" : "comp-no"}">${ok ? "YES" : "NO"}</td>`;
+    }
+    const ok = (rowA ? rowA.minutes : 0) >= state.threshold;
+    return `<td class="comp ${ok ? "comp-yes" : "comp-no"}">${ok ? "YES" : "NO"}</td>`;
+  }
+
+  function groupedRows() {
+    const aIds = state.dataA ? state.dataA.rows.map((r) => r.id) : [];
+    const seen = new Set();
+    const groups = [];
+    aIds.forEach((id) => {
+      seen.add(id);
+      groups.push({
+        id,
+        a: state.dataA.byId.get(id),
+        b: state.dataB ? state.dataB.byId.get(id) : null
+      });
+    });
+    if (state.dataB) {
+      state.dataB.rows.forEach((row) => {
+        if (seen.has(row.id)) return;
+        groups.push({ id: row.id, a: null, b: row });
+      });
+    }
+    return groups;
+  }
+
+  function render() {
+    const hasA = !!state.dataA;
+    els.empty.hidden = hasA;
+    els.tableWrap.hidden = !hasA;
+    els.legend.hidden = !hasA;
+    els.legendB.hidden = !state.dataB;
+    els.clearB.disabled = !state.dataB;
+    els.meta.hidden = !hasA;
+
+    if (!hasA) {
+      els.status.textContent = "";
+      return;
+    }
+
+    const meta = chosenMeta();
+    els.meta.innerHTML = [
+      ["Project", meta.project_name || "—"],
+      ["Project location", meta.project_location || formatLatLon(meta.latitude, meta.longitude) || "—"],
+      ["Analysis time", analysisCopy(meta)],
+      ["Datasets", state.dataB
+        ? `A Before: ${state.dataA.fileNames.join(", ")} · B After: ${state.dataB.fileNames.join(", ")}`
+        : `A Before: ${state.dataA.fileNames.join(", ")}`]
+    ].map(([label, value]) => `<article><span class="label">${label}</span><div class="value">${escapeHtml(value)}</div></article>`).join("");
+
+    const window = analysisWindow();
+    const compare = !!state.dataB;
+    const groups = groupedRows();
+    els.tbody.innerHTML = groups.map((g) => {
+      if (compare && g.a && g.b) {
+        return `
+          <tr class="pair-a">
+            <td class="id" rowspan="2">${escapeHtml(g.id)}</td>
+            <td class="orient">${escapeHtml(g.a.orientation || "—")}<span class="chip before">Before</span></td>
+            <td class="num hours">${g.a.minutes}</td>
+            <td class="bar">${renderBar(g.a, "before", window)}</td>
+            ${complianceCell("hidden")}
+          </tr>
+          <tr class="pair-b">
+            <td class="orient">${escapeHtml(g.b.orientation || "—")}<span class="chip after">After</span></td>
+            <td class="num hours">${g.b.minutes}</td>
+            <td class="bar">${renderBar(g.b, "after", window)}</td>
+            ${complianceCell("compare", g.a, g.b)}
+          </tr>`;
+      }
+      const row = g.a || g.b;
+      const kind = g.a ? "before" : "after";
+      const chip = compare ? `<span class="chip ${kind}">${g.a ? "Before" : "After"}</span>` : "";
+      const mode = compare ? (g.a && !g.b ? "hidden" : "single") : "single";
+      return `
+        <tr class="${kind === "after" ? "pair-b" : "pair-a"}">
+          <td class="id">${escapeHtml(row.id)}</td>
+          <td class="orient">${escapeHtml(row.orientation || "—")}${chip}</td>
+          <td class="num hours">${row.minutes}</td>
+          <td class="bar">${renderBar(row, kind, window)}</td>
+          ${complianceCell(mode, row, null)}
+        </tr>`;
+    }).join("");
+
+    const count = groups.length;
+    els.status.textContent = compare
+      ? `${count} properties · After complies if ≥ Before, or at least ${state.threshold} mins`
+      : `${count} properties · compliance is ${state.threshold} minutes of sun`;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  async function readFiles(fileList, kind) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return null;
+    const parsed = [];
+    for (const file of files) {
+      parsed.push({ name: file.name, kind, text: await file.text() });
+    }
+    return parseDataset(parsed);
+  }
+
+  els.fileA.addEventListener("change", async (ev) => {
+    const ds = await readFiles(ev.target.files, "A");
+    ev.target.value = "";
+    if (!ds || !ds.rows.length) {
+      els.status.textContent = "Could not read any openings from Data A.";
+      return;
+    }
+    state.dataA = ds;
+    render();
+  });
+
+  els.fileB.addEventListener("change", async (ev) => {
+    const ds = await readFiles(ev.target.files, "B");
+    ev.target.value = "";
+    if (!ds || !ds.rows.length) {
+      els.status.textContent = "Could not read any openings from Data B.";
+      return;
+    }
+    if (!state.dataA) {
+      state.dataA = ds;
+      state.dataA.label = "Before";
+    } else {
+      state.dataB = ds;
+    }
+    render();
+  });
+
+  els.clearB.addEventListener("click", () => {
+    state.dataB = null;
+    render();
+  });
+
+  els.threshold.addEventListener("input", () => {
+    const n = Number(els.threshold.value);
+    state.threshold = Number.isFinite(n) && n >= 0 ? n : COMPLIANCE_DEFAULT;
+    render();
+  });
+
+  function clearPrintFit() {
+    const page = document.querySelector(".page");
+    page.style.transform = "";
+    page.style.width = "";
+  }
+
+  function fitPrintToOnePage() {
+    clearPrintFit();
+    const page = document.querySelector(".page");
+    const width = page.scrollWidth;
+    const height = page.scrollHeight;
+    const maxW = 1050;
+    const maxH = 700;
+    const scale = Math.min(1, maxW / Math.max(width, 1), maxH / Math.max(height, 1));
+    if (scale < 0.999) {
+      page.style.transformOrigin = "top left";
+      page.style.transform = `scale(${scale})`;
+      page.style.width = `${100 / scale}%`;
+    }
+  }
+
+  els.printBtn.addEventListener("click", () => window.print());
+  window.addEventListener("beforeprint", fitPrintToOnePage);
+  window.addEventListener("afterprint", clearPrintFit);
+
+  window.SolarAccessReport = {
+    loadText (kind, files) {
+      const ds = parseDataset((files || []).map((file) => ({
+        name: file.name || (kind === "B" ? "data-b.csv" : "data-a.csv"),
+        kind,
+        text: file.text || ""
+      })));
+      if (!ds.rows.length) return false;
+      if (kind === "B") state.dataB = ds;
+      else state.dataA = ds;
+      render();
+      return true;
+    },
+    clearB () {
+      state.dataB = null;
+      render();
+    },
+    setThreshold (value) {
+      state.threshold = Number(value);
+      els.threshold.value = String(state.threshold);
+      render();
+    },
+    snapshot () {
+      return {
+        rows: groupedRows().map((g) => ({
+          id: g.id,
+          a: g.a ? { minutes: g.a.minutes, orientation: g.a.orientation, segments: g.a.segments } : null,
+          b: g.b ? { minutes: g.b.minutes, orientation: g.b.orientation, segments: g.b.segments } : null
+        })),
+        meta: chosenMeta(),
+        compare: !!state.dataB
+      };
+    }
+  };
+})();
+</script>
+</body>
+</html>
