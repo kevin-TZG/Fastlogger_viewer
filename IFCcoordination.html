@@ -1,0 +1,2212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IFC coordination check</title>
+<style>
+  :root {
+    --ink: #1c1915;
+    --muted: #5c564c;
+    --line: #d9d2c5;
+    --paper: #f6f3ec;
+    --card: #fffcf7;
+    --pass: #1f4d3a;
+    --pass-bg: #e5f0e8;
+    --fail: #8c2f2f;
+    --fail-bg: #f8e8e4;
+    --warn: #8a5a12;
+    --warn-bg: #f8efd8;
+    --shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--paper);
+    font: 16px/1.45 "Segoe UI", Helvetica, Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 32px; font-weight: 650; letter-spacing: -0.03em; margin: 0 0 8px; }
+  h2 { font-size: 18px; font-weight: 650; margin: 0 0 12px; }
+  h3 { font-size: 15px; font-weight: 650; margin: 14px 0 8px; }
+  p { margin: 0; }
+  .lede { max-width: 68ch; color: var(--muted); margin-bottom: 22px; }
+  .drop {
+    border: 1.5px dashed #b7ad9c;
+    background: var(--card);
+    border-radius: 14px;
+    min-height: 148px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    padding: 24px;
+  }
+  .drop.hot { border-color: var(--pass); background: var(--pass-bg); }
+  .drop strong { font-size: 18px; }
+  .drop span { color: var(--muted); }
+  button, .file-btn {
+    font: inherit;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  button:hover, .file-btn:hover { border-color: #8d8374; }
+  .file-btn { display: inline-block; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 22px;
+    align-items: end;
+    margin: 16px 0 8px;
+  }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input[type="number"] {
+    font: inherit;
+    color: var(--ink);
+    width: 110px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .hint { color: var(--muted); font-size: 13px; max-width: 78ch; margin-bottom: 14px; }
+  #status { min-height: 1.4em; color: var(--muted); margin: 8px 0 14px; }
+  .banner {
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .banner.pass { background: var(--pass-bg); color: var(--pass); }
+  .banner.fail { background: var(--fail-bg); color: var(--fail); }
+  .banner.info { background: #fff; border: 1px solid var(--line); }
+  .banner strong { display: block; font-size: 22px; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .plot-note { color: var(--muted); margin-bottom: 10px; }
+  svg.plot { width: 100%; height: auto; display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { max-width: 320px; word-break: break-word; }
+  td:nth-child(n+2), th:nth-child(n+2) { white-space: nowrap; }
+  th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+  tr.fail td { background: #fdf6f4; }
+  .tag {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .tag.pass { background: var(--pass-bg); color: var(--pass); }
+  .tag.fail { background: var(--fail-bg); color: var(--fail); }
+  .tag.check { background: #e7eef8; color: #1d4e89; }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  svg.plot[data-orbit] { cursor: grab; touch-action: none; }
+  .cards { display: grid; gap: 14px; }
+  .card { position: relative; padding-left: 16px; }
+  .swatch {
+    position: absolute;
+    left: 0; top: 16px; bottom: 16px;
+    width: 6px;
+    border-radius: 6px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 18px; word-break: break-word; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+  .nums div {
+    background: var(--paper);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .nums span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .nums strong { font-size: 18px; font-weight: 650; }
+  .note { margin-top: 10px; color: var(--muted); }
+  .card-tools { margin-top: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; font-size: 13px; }
+  .legend i {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .diagrams {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .diagrams h3 { margin-top: 0; }
+  .plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .zoom { display: flex; gap: 4px; }
+  .zoom button {
+    min-width: 36px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .zoom button:disabled { color: #b7ad9c; cursor: default; }
+  .plan-view { overflow: hidden; }
+  .plan-view svg { transform: scale(var(--plan-zoom, 1)); transform-origin: center center; }
+  footer { margin-top: 22px; color: var(--muted); font-size: 13px; max-width: 78ch; }
+  @media (max-width: 800px) {
+    .nums, .diagrams { grid-template-columns: 1fr; }
+    h1 { font-size: 26px; }
+  }
+  @media print {
+    body { background: white; }
+    .drop, .controls, .hint, #status, .card-tools, .file-btn { display: none !important; }
+    .panel, .banner { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>IFC coordination check</h1>
+  <p class="lede">Drop one or more IFC files. The page reads each file’s coordinate placement and reports whether the models share the same position and orientation. It does not load the building geometry.</p>
+
+  <div class="drop" id="drop">
+    <strong>Drop IFC files here</strong>
+    <span>Several files at once. Nothing is uploaded.</span>
+    <label class="file-btn">
+      Choose files
+      <input id="file" type="file" accept=".ifc" multiple hidden>
+    </label>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="clear">Reset</button>
+  </div>
+  <p id="status" role="status"></p>
+  <div id="report"></div>
+  <footer>Position comes from IfcMapConversion when the file has one, otherwise from the IfcSite placement. Latitude and longitude are shown for reference and are not the pass/fail test.</footer>
+</main>
+<script>
+var COLORS = ["#d92b2b", "#1d4ed8", "#16803c", "#e07a00", "#7c3aed", "#0891b2", "#be185d", "#ca8a04"];
+var CARDINAL = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+var state = { models: [], seq: 0, orbit: { yaw: 0.7, pitch: 0.55 }, planZoom: 100 };
+var ELEMENT_TYPES = {
+  IFCWALL: 1, IFCWALLSTANDARDCASE: 1, IFCSLAB: 1, IFCCOLUMN: 1, IFCBEAM: 1, IFCMEMBER: 1,
+  IFCPLATE: 1, IFCBUILDINGELEMENTPROXY: 1, IFCROOF: 1, IFCSTAIR: 1, IFCFOOTING: 1,
+  IFCCOVERING: 1, IFCRAILING: 1, IFCWINDOW: 1, IFCDOOR: 1, IFCCHIMNEY: 1, IFCFURNISHINGELEMENT: 1
+};
+var GEOM_REF_TYPES = {
+  IFCPRODUCTDEFINITIONSHAPE: 1, IFCSHAPEREPRESENTATION: 1, IFCFACETEDBREP: 1, IFCADVANCEDBREP: 1,
+  IFCMANIFOLDSOLIDBREP: 1, IFCCLOSEDSHELL: 1, IFCOPENSHELL: 1, IFCFACE: 1, IFCFACEBOUND: 1, IFCFACEOUTERBOUND: 1,
+  IFCEXTRUDEDAREASOLID: 1,
+  IFCREVOLVEDAREASOLID: 1, IFCSWEPTDISKSOLID: 1, IFCBOOLEANCLIPPINGRESULT: 1, IFCBOOLEANRESULT: 1,
+  IFCMAPPEDITEM: 1, IFCREPRESENTATIONMAP: 1, IFCPOLYLINE: 1, IFCCOMPOSITECURVE: 1,
+  IFCGEOMETRICCURVESET: 1, IFCARBITRARYCLOSEDPROFILEDEF: 1, IFCARBITRARYPROFILEDEFWITHVOIDS: 1,
+  IFCINDEXEDPOLYCURVE: 1, IFCBOUNDINGBOX: 1, IFCSHELLBASEDSURFACEMODEL: 1, IFCFACEBASEDSURFACEMODEL: 1
+};
+
+function createAccumulator() {
+  return {
+    inHeader: true,
+    fileDescription: "",
+    fileNameLine: "",
+    fileSchemaLine: "",
+    projects: [],
+    sites: [],
+    buildings: [],
+    contexts: [],
+    maps: [],
+    crs: new Map(),
+    applications: [],
+    unitAssignments: new Map(),
+    lengthUnits: new Map(),
+    placements: new Map(),
+    axes: new Map(),
+    points: new Map(),
+    dirs: new Map(),
+    need: new Set(),
+    pointCount: 0,
+    localCount: 0,
+    localX: [],
+    localY: [],
+    localZ: [],
+    localMin: [Infinity, Infinity, Infinity],
+    localMax: [-Infinity, -Infinity, -Infinity],
+    grids: [],
+    gridAxes: new Map(),
+    polylines: new Map(),
+    polycurves: new Map(),
+    curveLists: new Map(),
+    elements: [],
+    geomRefs: new Map(),
+    geomPoints: new Map(),
+    pointBox: new Map(),
+    over: { c4: 0, c5: 0, c6: 0, c7: 0, c8: 0, c9: 0, c10: 0 }
+  };
+}
+
+function argsOf(line) {
+  var open = line.indexOf("(");
+  var close = line.lastIndexOf(")");
+  if (open < 0 || close <= open) return "";
+  return line.slice(open + 1, close);
+}
+
+function splitArgs(inner) {
+  var args = [];
+  var depth = 0;
+  var start = 0;
+  var inStr = false;
+  for (var i = 0; i < inner.length; i++) {
+    var c = inner.charAt(i);
+    if (inStr) {
+      if (c === "'") {
+        if (inner.charAt(i + 1) === "'") { i++; continue; }
+        inStr = false;
+      }
+      continue;
+    }
+    if (c === "'") { inStr = true; continue; }
+    if (c === "(") { depth++; continue; }
+    if (c === ")") { depth--; continue; }
+    if (c === "," && depth === 0) {
+      args.push(inner.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  var last = inner.slice(start).trim();
+  if (last.length || args.length) args.push(last);
+  return args;
+}
+
+function unquote(token) {
+  if (!token || token === "$" || token === "*") return "";
+  if (token.charAt(0) === "'" && token.charAt(token.length - 1) === "'") {
+    return token.slice(1, -1).replace(/''/g, "'");
+  }
+  return token;
+}
+
+function parseReal(token) {
+  if (!token || token === "$" || token === "*") return null;
+  var n = Number(token);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseRef(token) {
+  if (!token || token.charAt(0) !== "#") return null;
+  var n = Number(token.slice(1));
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseCompound(token) {
+  if (!token || token === "$" || token === "*") return null;
+  var nums = token.match(/[+-]?\d+/g);
+  if (!nums || !nums.length) return null;
+  return nums.map(Number);
+}
+
+function headerOf(line) {
+  var n = line.length;
+  if (n < 5 || line.charCodeAt(0) !== 35) return null;
+  var i = 1;
+  var id = 0;
+  while (i < n) {
+    var c = line.charCodeAt(i);
+    if (c < 48 || c > 57) break;
+    id = id * 10 + (c - 48);
+    i++;
+  }
+  if (i === 1) return null;
+  while (i < n && line.charCodeAt(i) === 32) i++;
+  if (line.charCodeAt(i) !== 61) return null;
+  i++;
+  while (i < n && line.charCodeAt(i) === 32) i++;
+  var start = i;
+  while (i < n && line.charCodeAt(i) !== 40) i++;
+  if (i >= n) return null;
+  return { id: id, type: line.slice(start, i) };
+}
+
+function parseTuple(line) {
+  var i = line.indexOf("(");
+  var nums = [];
+  if (i < 0) return nums;
+  i++;
+  while (i < line.length && nums.length < 3) {
+    var c = line.charCodeAt(i);
+    if (c === 41) break;
+    if (c === 44 || c === 40 || c === 32) { i++; continue; }
+    var start = i;
+    if (c === 43 || c === 45) i++;
+    var any = false;
+    while (i < line.length) {
+      var d = line.charCodeAt(i);
+      if ((d >= 48 && d <= 57) || d === 46) { any = true; i++; continue; }
+      break;
+    }
+    if (i < line.length && (line.charAt(i) === "E" || line.charAt(i) === "e")) {
+      i++;
+      if (line.charAt(i) === "+" || line.charAt(i) === "-") i++;
+      while (i < line.length && line.charCodeAt(i) >= 48 && line.charCodeAt(i) <= 57) i++;
+    }
+    if (!any) break;
+    var value = Number(line.slice(start, i));
+    if (!Number.isFinite(value)) break;
+    nums.push(value);
+  }
+  return nums;
+}
+
+function examineCartesian(line, acc) {
+  var nums = parseTuple(line);
+  if (nums.length < 2) return;
+  var x = nums[0];
+  var y = nums[1];
+  var z = nums.length > 2 ? nums[2] : 0;
+  var h = Math.hypot(x, y);
+  acc.pointCount++;
+  if (h < 1e6 && Math.abs(z) < 1e6) {
+    acc.localCount++;
+    acc.localX.push(x);
+    acc.localY.push(y);
+    acc.localZ.push(z);
+    if (x < acc.localMin[0]) acc.localMin[0] = x;
+    if (y < acc.localMin[1]) acc.localMin[1] = y;
+    if (z < acc.localMin[2]) acc.localMin[2] = z;
+    if (x > acc.localMax[0]) acc.localMax[0] = x;
+    if (y > acc.localMax[1]) acc.localMax[1] = y;
+    if (z > acc.localMax[2]) acc.localMax[2] = z;
+  }
+  if (h > 1e4) acc.over.c4++;
+  if (h > 1e5) acc.over.c5++;
+  if (h > 1e6) acc.over.c6++;
+  if (h > 1e7) acc.over.c7++;
+  if (h > 1e8) acc.over.c8++;
+  if (h > 1e9) acc.over.c9++;
+  if (h > 1e10) acc.over.c10++;
+}
+
+function ingestLine(acc, raw) {
+  if (!raw) return;
+  var line = raw;
+  if (line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+  if (!line) return;
+  if (acc.inHeader) {
+    if (line.startsWith("FILE_DESCRIPTION")) acc.fileDescription = line;
+    else if (line.startsWith("FILE_NAME")) acc.fileNameLine = line;
+    else if (line.startsWith("FILE_SCHEMA")) acc.fileSchemaLine = line;
+    else if (line.startsWith("ENDSEC")) acc.inHeader = false;
+    return;
+  }
+  if (line.charCodeAt(0) !== 35) return;
+  var ent = headerOf(line);
+  if (!ent) return;
+  var args;
+  switch (ent.type) {
+    case "IFCCARTESIANPOINT":
+      examineCartesian(line, acc);
+      var pointNums = parseTuple(line);
+      if (pointNums.length >= 2 && Math.hypot(pointNums[0], pointNums[1]) < 1e6 && Math.abs(pointNums[2] || 0) < 1e6) {
+        acc.geomPoints.set(ent.id, pointNums);
+      }
+      break;
+    case "IFCLOCALPLACEMENT":
+      args = splitArgs(argsOf(line));
+      acc.placements.set(ent.id, { relTo: parseRef(args[0]), axis: parseRef(args[1]) });
+      break;
+    case "IFCAXIS2PLACEMENT3D":
+      args = splitArgs(argsOf(line));
+      acc.axes.set(ent.id, { loc: parseRef(args[0]), z: parseRef(args[1]), x: parseRef(args[2]) });
+      break;
+    case "IFCPROJECT":
+      args = splitArgs(argsOf(line));
+      acc.projects.push({
+        name: unquote(args[2]),
+        longName: unquote(args[5]),
+        phase: unquote(args[6]),
+        unitsId: parseRef(args[8])
+      });
+      break;
+    case "IFCSITE":
+      args = splitArgs(argsOf(line));
+      acc.sites.push({
+        name: unquote(args[2]),
+        placementId: parseRef(args[5]),
+        lat: parseCompound(args[9]),
+        lon: parseCompound(args[10]),
+        elev: parseReal(args[11])
+      });
+      break;
+    case "IFCBUILDING":
+      args = splitArgs(argsOf(line));
+      acc.buildings.push({ name: unquote(args[2]), placementId: parseRef(args[5]) });
+      break;
+    case "IFCGEOMETRICREPRESENTATIONCONTEXT":
+      args = splitArgs(argsOf(line));
+      acc.contexts.push({
+        contextType: unquote(args[1]),
+        dim: parseReal(args[2]),
+        wcsId: parseRef(args[4]),
+        trueNorthId: parseRef(args[5])
+      });
+      break;
+    case "IFCMAPCONVERSION":
+      args = splitArgs(argsOf(line));
+      acc.maps.push({
+        target: parseRef(args[1]),
+        eastings: parseReal(args[2]),
+        northings: parseReal(args[3]),
+        height: parseReal(args[4]),
+        abscissa: parseReal(args[5]),
+        ordinate: parseReal(args[6]),
+        scale: parseReal(args[7])
+      });
+      break;
+    case "IFCPROJECTEDCRS":
+      args = splitArgs(argsOf(line));
+      acc.crs.set(ent.id, {
+        name: unquote(args[0]),
+        datum: unquote(args[2]),
+        projection: unquote(args[4]),
+        unitId: parseRef(args[6])
+      });
+      break;
+    case "IFCAPPLICATION":
+      args = splitArgs(argsOf(line));
+      acc.applications.push({ version: unquote(args[1]), name: unquote(args[2]) });
+      break;
+    case "IFCUNITASSIGNMENT":
+      acc.unitAssignments.set(ent.id, (argsOf(line).match(/#(\d+)/g) || []).map(function (token) {
+        return Number(token.slice(1));
+      }));
+      break;
+    case "IFCGRID":
+      args = splitArgs(argsOf(line));
+      acc.grids.push({
+        name: unquote(args[2]),
+        placementId: parseRef(args[5]),
+        axisIds: refList(args[7]).concat(refList(args[8]), refList(args[9]))
+      });
+      break;
+    case "IFCGRIDAXIS":
+      args = splitArgs(argsOf(line));
+      acc.gridAxes.set(ent.id, {
+        tag: unquote(args[0]),
+        curveId: parseRef(args[1]),
+        sameSense: !args[2] || args[2].indexOf("F") < 0
+      });
+      break;
+    case "IFCPOLYLINE":
+      acc.polylines.set(ent.id, refList(argsOf(line)));
+      acc.geomRefs.set(ent.id, refList(argsOf(line)));
+      break;
+    case "IFCINDEXEDPOLYCURVE":
+      acc.polycurves.set(ent.id, indexedCurve(line));
+      break;
+    case "IFCCARTESIANPOINTLIST3D":
+    case "IFCCARTESIANPOINTLIST2D":
+      var listed = pointListBox(line, ent.type === "IFCCARTESIANPOINTLIST3D" ? 3 : 2);
+      if (listed.box) acc.pointBox.set(ent.id, listed.box);
+      if (listed.points) acc.curveLists.set(ent.id, listed.points);
+      break;
+    case "IFCPOLYLOOP":
+      var loopIds = refList(argsOf(line));
+      var loopBox = boxFromPoints(acc, loopIds);
+      if (loopBox) acc.pointBox.set(ent.id, loopBox);
+      else acc.geomRefs.set(ent.id, loopIds);
+      break;
+    case "IFCPOLYGONALFACESET":
+    case "IFCTRIANGULATEDFACESET":
+      var faceList = refList(argsOf(line));
+      if (faceList.length) acc.geomRefs.set(ent.id, [faceList[0]]);
+      break;
+    case "IFCSIUNIT":
+      if (line.indexOf("LENGTHUNIT") < 0) break;
+      args = splitArgs(argsOf(line));
+      if (!args[1] || args[1].indexOf("LENGTHUNIT") < 0) break;
+      acc.lengthUnits.set(ent.id, {
+        prefix: !args[2] || args[2] === "$" ? "$" : args[2].replace(/\./g, ""),
+        name: (args[3] || "").replace(/\./g, "")
+      });
+      break;
+    default:
+      if (ELEMENT_TYPES[ent.type]) storeElement(acc, line);
+      else if (GEOM_REF_TYPES[ent.type]) acc.geomRefs.set(ent.id, refList(argsOf(line)));
+      break;
+  }
+}
+
+function collectNeed(acc) {
+  var need = new Set();
+  function addAxis(axisId) {
+    if (axisId == null) return;
+    var ax = acc.axes.get(axisId);
+    if (!ax) return;
+    if (ax.loc != null) need.add(ax.loc);
+    if (ax.z != null) need.add(ax.z);
+    if (ax.x != null) need.add(ax.x);
+  }
+  function walk(pid) {
+    var seen = new Set();
+    while (pid != null && !seen.has(pid)) {
+      seen.add(pid);
+      var pl = acc.placements.get(pid);
+      if (!pl) break;
+      addAxis(pl.axis);
+      pid = pl.relTo;
+    }
+  }
+  acc.sites.forEach(function (site) { walk(site.placementId); });
+  acc.buildings.forEach(function (building) { walk(building.placementId); });
+  acc.contexts.forEach(function (ctx) {
+    addAxis(ctx.wcsId);
+    if (ctx.trueNorthId != null) need.add(ctx.trueNorthId);
+  });
+  acc.grids.forEach(function (grid) {
+    walk(grid.placementId);
+    grid.axisIds.forEach(function (id) {
+      var axis = acc.gridAxes.get(id);
+      var refs = axis ? acc.polylines.get(axis.curveId) : null;
+      if (!refs) return;
+      refs.forEach(function (pid) { need.add(pid); });
+    });
+  });
+  acc.elements.forEach(function (element) { walk(element.placementId); });
+  acc.need = need;
+}
+
+function refList(token) {
+  if (!token || token === "$" || token === "*") return [];
+  return (token.match(/#(\d+)/g) || []).map(function (item) { return Number(item.slice(1)); });
+}
+
+function storeElement(acc, line) {
+  var args = splitArgs(argsOf(line));
+  var placementId = parseRef(args[5]);
+  var repId = parseRef(args[6]);
+  if (placementId != null && repId != null) acc.elements.push({ placementId: placementId, repId: repId });
+}
+
+function indexedCurve(line) {
+  var inner = argsOf(line);
+  var indexes = [];
+  var match = inner.match(/IFCLINEINDEX\(\((\d+(?:\s*,\s*\d+)*)\)\)/i);
+  if (match) {
+    indexes = match[1].split(",").map(function (item) { return Number(item); });
+  }
+  return { listId: parseRef(inner), indexes: indexes };
+}
+
+function pointListBox(line, dim) {
+  var min = [Infinity, Infinity, Infinity];
+  var max = [-Infinity, -Infinity, -Infinity];
+  var i = line.indexOf("(");
+  if (i < 0) return { box: null, points: null };
+  var vals = [0, 0, 0];
+  var axis = 0;
+  var saw = false;
+  var stored = [];
+  var count = 0;
+  while (i < line.length) {
+    var c = line.charCodeAt(i);
+    if (c === 40 || c === 41 || c === 44 || c === 32) { i++; continue; }
+    var start = i;
+    if (c === 43 || c === 45) i++;
+    var any = false;
+    while (i < line.length) {
+      var d = line.charCodeAt(i);
+      if ((d >= 48 && d <= 57) || d === 46) { any = true; i++; continue; }
+      break;
+    }
+    if (i < line.length && (line.charAt(i) === "E" || line.charAt(i) === "e")) {
+      i++;
+      if (line.charAt(i) === "+" || line.charAt(i) === "-") i++;
+      while (i < line.length && line.charCodeAt(i) >= 48 && line.charCodeAt(i) <= 57) i++;
+    }
+    if (!any) { i++; continue; }
+    vals[axis] = Number(line.slice(start, i));
+    axis++;
+    if (axis === dim) {
+      var x = vals[0];
+      var y = vals[1];
+      var z = dim === 3 ? vals[2] : 0;
+      axis = 0;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.hypot(x, y) >= 1e6 || Math.abs(z) >= 1e6) continue;
+      saw = true;
+      if (x < min[0]) min[0] = x;
+      if (y < min[1]) min[1] = y;
+      if (z < min[2]) min[2] = z;
+      if (x > max[0]) max[0] = x;
+      if (y > max[1]) max[1] = y;
+      if (z > max[2]) max[2] = z;
+      count++;
+      if (count <= 8) stored.push([x, y, z]);
+    }
+  }
+  return {
+    box: saw ? [min[0], min[1], min[2], max[0], max[1], max[2]] : null,
+    points: saw && count >= 2 && count <= 8 ? stored : null
+  };
+}
+
+function boxFromPoints(acc, ids) {
+  var min = [Infinity, Infinity, Infinity];
+  var max = [-Infinity, -Infinity, -Infinity];
+  var saw = false;
+  for (var i = 0; i < ids.length; i++) {
+    var point = acc.geomPoints.get(ids[i]);
+    if (!point) continue;
+    var z = point[2] || 0;
+    saw = true;
+    if (point[0] < min[0]) min[0] = point[0];
+    if (point[1] < min[1]) min[1] = point[1];
+    if (z < min[2]) min[2] = z;
+    if (point[0] > max[0]) max[0] = point[0];
+    if (point[1] > max[1]) max[1] = point[1];
+    if (z > max[2]) max[2] = z;
+  }
+  return saw ? [min[0], min[1], min[2], max[0], max[1], max[2]] : null;
+}
+
+function unionBox(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return [
+    Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]),
+    Math.max(a[3], b[3]), Math.max(a[4], b[4]), Math.max(a[5], b[5])
+  ];
+}
+
+function ingestResolveLine(acc, raw) {
+  if (!raw) return true;
+  var line = raw;
+  if (line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+  if (!line || line.charCodeAt(0) !== 35) return true;
+  var ent = headerOf(line);
+  if (!ent || !acc.need.has(ent.id)) return true;
+  if (ent.type === "IFCCARTESIANPOINT") acc.points.set(ent.id, parseTuple(line));
+  else if (ent.type === "IFCDIRECTION") acc.dirs.set(ent.id, parseTuple(line));
+  acc.need.delete(ent.id);
+  return acc.need.size > 0;
+}
+
+function prefixScale(prefix) {
+  var table = {
+    EXA: 1e18, PETA: 1e15, TERA: 1e12, GIGA: 1e9, MEGA: 1e6, KILO: 1e3,
+    HECTO: 1e2, DECA: 10, $: 1, DECI: 1e-1, CENTI: 1e-2, MILLI: 1e-3,
+    MICRO: 1e-6, NANO: 1e-9, PICO: 1e-12, FEMTO: 1e-15, ATTO: 1e-18
+  };
+  return Object.prototype.hasOwnProperty.call(table, prefix) ? table[prefix] : 1;
+}
+
+function scaleOfUnit(unit) {
+  if (!unit || unit.name !== "METRE") return null;
+  return prefixScale(unit.prefix || "$");
+}
+
+function unitLabel(unit) {
+  if (!unit) return "unknown";
+  var prefix = unit.prefix === "$" ? "" : unit.prefix.toLowerCase();
+  return prefix + unit.name.toLowerCase();
+}
+
+function projectLengthUnit(acc) {
+  var project = acc.projects[0];
+  var allowed = project && acc.unitAssignments.get(project.unitsId);
+  var chosen = null;
+  acc.lengthUnits.forEach(function (unit, id) {
+    if (chosen) return;
+    if (!allowed || allowed.indexOf(id) >= 0) chosen = unit;
+  });
+  if (!chosen) {
+    acc.lengthUnits.forEach(function (unit) { if (!chosen) chosen = unit; });
+  }
+  var scale = scaleOfUnit(chosen);
+  return { unit: chosen, scale: scale == null ? 0.001 : scale, assumed: scale == null };
+}
+
+function countOver(acc, rawLimit) {
+  var cuts = [
+    [1e4, "c4"], [1e5, "c5"], [1e6, "c6"], [1e7, "c7"],
+    [1e8, "c8"], [1e9, "c9"], [1e10, "c10"]
+  ];
+  var key = "c4";
+  for (var i = 0; i < cuts.length; i++) {
+    if (cuts[i][0] <= rawLimit + 1e-9) key = cuts[i][1];
+  }
+  return acc.over[key] || 0;
+}
+
+function vnorm(v) {
+  var x = v[0] || 0;
+  var y = v[1] || 0;
+  var z = v[2] || 0;
+  var len = Math.hypot(x, y, z);
+  if (len < 1e-12) return [1, 0, 0];
+  return [x / len, y / len, z / len];
+}
+
+function orthonormal(zIn, xIn) {
+  var z = zIn && zIn.length ? vnorm(zIn) : [0, 0, 1];
+  var x0 = xIn && xIn.length ? [xIn[0] || 0, xIn[1] || 0, xIn[2] || 0] : [1, 0, 0];
+  var dot = x0[0] * z[0] + x0[1] * z[1] + x0[2] * z[2];
+  var x = vnorm([x0[0] - dot * z[0], x0[1] - dot * z[1], x0[2] - dot * z[2]]);
+  if (Math.hypot(x[0], x[1], x[2]) < 0.5) x = Math.abs(z[2]) > 0.9 ? [1, 0, 0] : [0, 0, 1];
+  var y = [
+    z[1] * x[2] - z[2] * x[1],
+    z[2] * x[0] - z[0] * x[2],
+    z[0] * x[1] - z[1] * x[0]
+  ];
+  return { x: x, y: y, z: z };
+}
+
+function applyFrame(parent, child) {
+  if (!parent) return child;
+  var o = child.origin;
+  function rot(v) {
+    return [
+      parent.x[0] * v[0] + parent.y[0] * v[1] + parent.z[0] * v[2],
+      parent.x[1] * v[0] + parent.y[1] * v[1] + parent.z[1] * v[2],
+      parent.x[2] * v[0] + parent.y[2] * v[1] + parent.z[2] * v[2]
+    ];
+  }
+  return {
+    origin: [
+      parent.origin[0] + parent.x[0] * o[0] + parent.y[0] * o[1] + parent.z[0] * o[2],
+      parent.origin[1] + parent.x[1] * o[0] + parent.y[1] * o[1] + parent.z[1] * o[2],
+      parent.origin[2] + parent.x[2] * o[0] + parent.y[2] * o[1] + parent.z[2] * o[2]
+    ],
+    x: rot(child.x),
+    y: rot(child.y),
+    z: rot(child.z)
+  };
+}
+
+function frameFromAxis(acc, axisId, scale) {
+  var ax = acc.axes.get(axisId);
+  if (!ax) return null;
+  var loc = acc.points.get(ax.loc);
+  if (!loc) return null;
+  var basis = orthonormal(ax.z != null ? acc.dirs.get(ax.z) : null, ax.x != null ? acc.dirs.get(ax.x) : null);
+  return {
+    origin: [loc[0] * scale, loc[1] * scale, (loc[2] || 0) * scale],
+    x: basis.x,
+    y: basis.y,
+    z: basis.z
+  };
+}
+
+function placementFrame(acc, placementId, scale, wcs) {
+  var chain = [];
+  var pid = placementId;
+  var seen = new Set();
+  while (pid != null && !seen.has(pid)) {
+    seen.add(pid);
+    var pl = acc.placements.get(pid);
+    if (!pl) return null;
+    var frame = frameFromAxis(acc, pl.axis, scale);
+    if (!frame) return null;
+    chain.push(frame);
+    pid = pl.relTo;
+  }
+  var world = wcs;
+  for (var i = chain.length - 1; i >= 0; i--) world = applyFrame(world, chain[i]);
+  return world;
+}
+
+function placementPointIds(acc, placementId) {
+  var ids = [];
+  var pid = placementId;
+  var seen = new Set();
+  while (pid != null && !seen.has(pid)) {
+    seen.add(pid);
+    var pl = acc.placements.get(pid);
+    if (!pl) break;
+    var ax = acc.axes.get(pl.axis);
+    if (ax && ax.loc != null) ids.push(ax.loc);
+    pid = pl.relTo;
+  }
+  return ids;
+}
+
+function pickContext(acc) {
+  var list = acc.contexts;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].dim === 3 && /model/i.test(list[i].contextType || "")) return list[i];
+  }
+  for (var j = 0; j < list.length; j++) if (list[j].dim === 3) return list[j];
+  return list[0] || null;
+}
+
+function bearingFromXY(x, y) {
+  if (Math.hypot(x, y) < 1e-8) return null;
+  var deg = Math.atan2(x, y) * 180 / Math.PI;
+  if (deg < 0) deg += 360;
+  return deg;
+}
+
+function angleDelta(a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  var d = Math.abs(a - b) % 360;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+
+function exportSettingOf(description) {
+  if (!description) return "";
+  var parts = [];
+  var position = description.match(/IFC Model position:\s*([^\]]+)/i);
+  if (position) parts.push(position[1].trim());
+  var base = description.match(/CoordinateBase:\s*([^,\]]+)/i);
+  if (base) parts.push(base[1].trim());
+  var site = description.match(/ProjectSite:\s*([^,\]]+)/i);
+  if (site) parts.push("Project site: " + site[1].trim());
+  return parts.join(" · ");
+}
+
+function schemaOf(line) {
+  var match = line && line.match(/FILE_SCHEMA\(\(\s*'([^']+)'/i);
+  return match ? match[1] : "";
+}
+
+function originatingSystem(line) {
+  if (!line) return "";
+  var args = splitArgs(argsOf(line));
+  return unquote(args[5] || "");
+}
+
+function decimalDegrees(comps) {
+  if (!comps || !comps.length) return null;
+  var sign = comps[0] < 0 ? -1 : 1;
+  var degrees = Math.abs(comps[0]);
+  var minutes = Math.abs(comps[1] || 0);
+  var seconds = Math.abs(comps[2] || 0) + Math.abs(comps[3] || 0) / 1e6;
+  return sign * (degrees + minutes / 60 + seconds / 3600);
+}
+
+function formatCompound(comps, positive, negative) {
+  if (!comps || !comps.length) return "—";
+  var sign = comps[0] < 0 ? -1 : 1;
+  var seconds = Math.abs(comps[2] || 0) + Math.abs(comps[3] || 0) / 1e6;
+  var dec = decimalDegrees(comps);
+  var dms = Math.abs(comps[0]) + "° " +
+    String(Math.abs(comps[1] || 0)).padStart(2, "0") + "′ " +
+    seconds.toFixed(4) + "″ " + (sign < 0 ? negative : positive);
+  return dms + " (" + dec.toFixed(6) + "°)";
+}
+
+function softwareOf(acc) {
+  var origin = originatingSystem(acc.fileNameLine);
+  var app = acc.applications[0];
+  if (origin && acc.applications.length) {
+    var lower = origin.toLowerCase();
+    for (var i = 0; i < acc.applications.length; i++) {
+      var name = acc.applications[i].name.toLowerCase();
+      if (lower.indexOf(name) >= 0 || name.indexOf(lower.split(" ")[0]) >= 0) {
+        app = acc.applications[i];
+        break;
+      }
+    }
+  }
+  if (app) {
+    var label = app.name || "";
+    if (app.version && label.indexOf(app.version) < 0) label = (label + " " + app.version).trim();
+    return label || origin || "Unknown software";
+  }
+  return origin || "Unknown software";
+}
+
+function modelFromAccumulator(acc, fileName) {
+  var length = projectLengthUnit(acc);
+  var scale = length.scale;
+  var ctx = pickContext(acc);
+  var wcs = null;
+  if (ctx && ctx.wcsId != null) wcs = frameFromAxis(acc, ctx.wcsId, scale);
+  var site = acc.sites[0] || null;
+  var siteFrame = site ? placementFrame(acc, site.placementId, scale, wcs) : null;
+  var buildings = acc.buildings.map(function (building) {
+    var frame = placementFrame(acc, building.placementId, scale, wcs);
+    return {
+      name: building.name || "Building",
+      frame: frame
+    };
+  });
+  var map = acc.maps[0] || null;
+  var crs = map ? acc.crs.get(map.target) : null;
+  var mapScale = 1;
+  if (crs && crs.unitId != null) {
+    var mapUnitScale = scaleOfUnit(acc.lengthUnits.get(crs.unitId));
+    if (mapUnitScale != null) mapScale = mapUnitScale;
+  }
+  var model = {
+    fileName: fileName,
+    project: "",
+    software: softwareOf(acc),
+    schema: schemaOf(acc.fileSchemaLine),
+    exportSetting: exportSettingOf(acc.fileDescription),
+    fileDescription: acc.fileDescription || "",
+    units: unitLabel(length.unit),
+    unitsAssumed: length.assumed,
+    hasPosition: false,
+    source: "",
+    crsName: "",
+    e: null,
+    n: null,
+    z: null,
+    bearing: null,
+    trueNorth: null,
+    lat: site ? site.lat : null,
+    lon: site ? site.lon : null,
+    refElevation: null,
+    siteName: site ? site.name : "",
+    siteCount: acc.sites.length,
+    buildings: [],
+    geometryFar: false,
+    geometrySpan: null,
+    error: ""
+  };
+  var project = acc.projects[0];
+  if (project) model.project = project.longName || project.name || "";
+  if (site && site.elev != null) model.refElevation = site.elev * scale;
+  if (ctx && ctx.trueNorthId != null) {
+    var tn = acc.dirs.get(ctx.trueNorthId);
+    if (tn) model.trueNorth = bearingFromXY(tn[0] || 0, tn[1] || 0);
+  }
+  if (map && map.eastings != null && map.northings != null) {
+    model.hasPosition = true;
+    model.source = "map";
+    model.e = map.eastings * mapScale;
+    model.n = map.northings * mapScale;
+    model.z = (map.height || 0) * mapScale;
+    var abscissa = map.abscissa == null ? 1 : map.abscissa;
+    var ordinate = map.ordinate == null ? 0 : map.ordinate;
+    model.bearing = bearingFromXY(abscissa, ordinate);
+    setAxesFromAbscissa(model, abscissa, ordinate);
+    model.crsName = crs ? [crs.name, crs.projection, crs.datum].filter(Boolean).join(" · ") : "";
+    if (map.scale != null && Math.abs(map.scale - 1) > 1e-9) model.mapScale = map.scale;
+  } else if (siteFrame) {
+    model.hasPosition = true;
+    model.source = "site";
+    model.e = siteFrame.origin[0];
+    model.n = siteFrame.origin[1];
+    model.z = siteFrame.origin[2];
+    model.bearing = bearingFromXY(siteFrame.x[0], siteFrame.x[1]);
+    model.axisX = siteFrame.x.slice();
+    model.axisY = siteFrame.y.slice();
+    model.axisZ = siteFrame.z.slice();
+  } else if (!site && !map) {
+    model.error = "No IfcSite placement or IfcMapConversion was found.";
+  } else {
+    model.error = "The site placement could not be resolved.";
+  }
+  var siteOrigin = siteFrame ? siteFrame.origin : null;
+  buildings.forEach(function (building) {
+    if (!building.frame) return;
+    var origin = building.frame.origin;
+    var offset = siteOrigin ? Math.hypot(origin[0] - siteOrigin[0], origin[1] - siteOrigin[1], origin[2] - siteOrigin[2]) : 0;
+    model.buildings.push({
+      name: building.name,
+      e: origin[0],
+      n: origin[1],
+      z: origin[2],
+      offset: offset
+    });
+  });
+  var rawLimit = 10000 / scale;
+  var farEntities = countOver(acc, rawLimit);
+  var largeIds = new Set();
+  var idList = site ? placementPointIds(acc, site.placementId) : [];
+  acc.buildings.forEach(function (building) {
+    idList = idList.concat(placementPointIds(acc, building.placementId));
+  });
+  idList.forEach(function (id) {
+    var point = acc.points.get(id);
+    if (point && Math.hypot(point[0], point[1]) > rawLimit) largeIds.add(id);
+  });
+  model.geometryFar = farEntities > largeIds.size;
+  if (acc.localX.length && model.axisX) {
+    var xr = robustEdge(acc.localX, scale);
+    var yr = robustEdge(acc.localY, scale);
+    var zr = robustEdge(acc.localZ, scale);
+    model.extentTrimmed = xr.trimmed || yr.trimmed || zr.trimmed;
+    model.localBox = { min: [xr.min, yr.min, zr.min], max: [xr.max, yr.max, zr.max] };
+    model.geometrySpan = {
+      width: xr.max - xr.min,
+      depth: yr.max - yr.min,
+      zMin: zr.min,
+      zMax: zr.max
+    };
+    var foot = extremeFootprint(acc.localX, acc.localY, acc.localZ, scale, model, xr, yr, zr);
+    var placed = placedOutline(acc, scale, wcs);
+    if (placed) {
+      model.footprint = placed.loop;
+      model.footZ = [placed.zMin, placed.zMax];
+      model.geometrySpan = {
+        width: placed.width,
+        depth: placed.depth,
+        zMin: placed.zMin,
+        zMax: placed.zMax
+      };
+      model.extentTrimmed = placed.trimmed;
+    } else if (foot) {
+      model.footprint = foot.loop;
+      model.footZ = [foot.zMin, foot.zMax];
+    }
+  }
+  var grids = lowestGrid(acc, scale, wcs, model, siteFrame);
+  model.gridLines = grids.lines;
+  model.gridZ = grids.z;
+  model.gridName = grids.name;
+  acc.localX = null;
+  acc.localY = null;
+  acc.localZ = null;
+  acc.polylines = null;
+  acc.polycurves = null;
+  acc.curveLists = null;
+  acc.geomPoints = null;
+  acc.geomRefs = null;
+  acc.pointBox = null;
+  acc.elements = null;
+  return model;
+}
+
+function framePoint(frame, x, y, z) {
+  return {
+    e: frame.origin[0] + x * frame.x[0] + y * frame.y[0] + z * frame.z[0],
+    n: frame.origin[1] + x * frame.x[1] + y * frame.y[1] + z * frame.z[1],
+    z: frame.origin[2] + x * frame.x[2] + y * frame.y[2] + z * frame.z[2]
+  };
+}
+
+function toSurvey(model, siteFrame, point) {
+  if (!siteFrame || model.source !== "map") return point;
+  var dx = point.e - siteFrame.origin[0];
+  var dy = point.n - siteFrame.origin[1];
+  var dz = point.z - siteFrame.origin[2];
+  var lx = siteFrame.x[0] * dx + siteFrame.x[1] * dy + siteFrame.x[2] * dz;
+  var ly = siteFrame.y[0] * dx + siteFrame.y[1] * dy + siteFrame.y[2] * dz;
+  var lz = siteFrame.z[0] * dx + siteFrame.z[1] * dy + siteFrame.z[2] * dz;
+  return mapPoint(model, lx, ly, lz);
+}
+
+function extremeFootprint(xs, ys, zs, scale, model, xr, yr, zr) {
+  var bestN = -Infinity;
+  var bestE = -Infinity;
+  var bestS = -Infinity;
+  var bestW = -Infinity;
+  var nw = null;
+  var ne = null;
+  var se = null;
+  var sw = null;
+  var zMin = Infinity;
+  var zMax = -Infinity;
+  var count = 0;
+  for (var i = 0; i < xs.length; i++) {
+    var x = xs[i] * scale;
+    var y = ys[i] * scale;
+    var z = zs[i] * scale;
+    if (x < xr.min || x > xr.max || y < yr.min || y > yr.max || z < zr.min || z > zr.max) continue;
+    var point = mapPoint(model, x, y, z);
+    count++;
+    if (point.z < zMin) zMin = point.z;
+    if (point.z > zMax) zMax = point.z;
+    var northWest = point.n - point.e;
+    var northEast = point.n + point.e;
+    var southEast = point.e - point.n;
+    var southWest = -point.e - point.n;
+    if (northWest > bestN) { bestN = northWest; nw = point; }
+    if (northEast > bestE) { bestE = northEast; ne = point; }
+    if (southEast > bestS) { bestS = southEast; se = point; }
+    if (southWest > bestW) { bestW = southWest; sw = point; }
+  }
+  if (count < 4 || !nw || !ne || !se || !sw) return null;
+  return {
+    loop: [
+      { e: nw.e, n: nw.n },
+      { e: ne.e, n: ne.n },
+      { e: se.e, n: se.n },
+      { e: sw.e, n: sw.n }
+    ],
+    zMin: zMin,
+    zMax: zMax
+  };
+}
+
+function representationBounds(acc, id, cache) {
+  if (cache.has(id)) return cache.get(id);
+  var seen = new Set();
+  function walk(node) {
+    if (cache.has(node)) return cache.get(node);
+    if (seen.has(node)) return null;
+    seen.add(node);
+    var box = null;
+    if (acc.pointBox && acc.pointBox.has(node)) box = acc.pointBox.get(node);
+    else if (acc.geomPoints && acc.geomPoints.has(node)) {
+      var point = acc.geomPoints.get(node);
+      var z = point[2] || 0;
+      box = [point[0], point[1], z, point[0], point[1], z];
+    } else if (acc.geomRefs && acc.geomRefs.has(node)) {
+      var refs = acc.geomRefs.get(node);
+      for (var i = 0; i < refs.length; i++) box = unionBox(box, walk(refs[i]));
+    }
+    cache.set(node, box);
+    return box;
+  }
+  return walk(id);
+}
+
+function placedOutline(acc, scale, wcs) {
+  if (!acc.elements || !acc.elements.length) return null;
+  var cache = new Map();
+  var world = [];
+  acc.elements.forEach(function (element) {
+    var local = representationBounds(acc, element.repId, cache);
+    if (!local) return;
+    var frame = placementFrame(acc, element.placementId, scale, wcs);
+    if (!frame) return;
+    var xs = [local[0] * scale, local[3] * scale];
+    var ys = [local[1] * scale, local[4] * scale];
+    var zs = [local[2] * scale, local[5] * scale];
+    for (var ix = 0; ix < 2; ix++) {
+      for (var iy = 0; iy < 2; iy++) {
+        for (var iz = 0; iz < 2; iz++) world.push(framePoint(frame, xs[ix], ys[iy], zs[iz]));
+      }
+    }
+  });
+  if (world.length < 8) return null;
+  return worldFootprint(world);
+}
+
+function worldFootprint(points) {
+  var east = points.map(function (point) { return point.e; }).sort(function (a, b) { return a - b; });
+  var north = points.map(function (point) { return point.n; }).sort(function (a, b) { return a - b; });
+  var midE = east[Math.floor(east.length / 2)];
+  var midN = north[Math.floor(north.length / 2)];
+  var ranked = points.map(function (point) {
+    return { point: point, r: Math.hypot(point.e - midE, point.n - midN) };
+  });
+  ranked.sort(function (a, b) { return a.r - b.r; });
+  var cut = ranked[ranked.length - 1].r;
+  for (var i = 1; i < ranked.length; i++) {
+    if (ranked[i].r - ranked[i - 1].r > 50) {
+      cut = ranked[i - 1].r;
+      break;
+    }
+  }
+  var kept = [];
+  for (var j = 0; j < ranked.length; j++) {
+    if (ranked[j].r > cut + 1e-6) break;
+    kept.push(ranked[j].point);
+  }
+  var trimmed = kept.length !== points.length;
+  if (kept.length < 8) {
+    kept = points;
+    trimmed = false;
+  }
+  var zr = { min: Infinity, max: -Infinity };
+  kept.forEach(function (point) {
+    if (point.z < zr.min) zr.min = point.z;
+    if (point.z > zr.max) zr.max = point.z;
+  });
+  if (kept.length < 3) return null;
+  var loop = orientedRectangle(kept);
+  if (!loop) return null;
+  var width = Math.hypot(loop[1].e - loop[0].e, loop[1].n - loop[0].n);
+  var depth = Math.hypot(loop[3].e - loop[0].e, loop[3].n - loop[0].n);
+  if (Math.max(width, depth) < 1) return null;
+  return {
+    loop: loop,
+    zMin: zr.min,
+    zMax: zr.max,
+    width: width,
+    depth: depth,
+    trimmed: trimmed
+  };
+}
+
+function orientedRectangle(points) {
+  var hull = convexHull(points);
+  if (hull.length < 2) return null;
+  if (hull.length === 2) {
+    return rectangleOnEdge(hull[0], hull[1], hull);
+  }
+  var best = null;
+  var bestLoop = null;
+  for (var i = 0; i < hull.length; i++) {
+    var loop = rectangleOnEdge(hull[i], hull[(i + 1) % hull.length], hull);
+    var area = Math.hypot(loop[1].e - loop[0].e, loop[1].n - loop[0].n) * Math.hypot(loop[3].e - loop[0].e, loop[3].n - loop[0].n);
+    if (!best || area < best) {
+      best = area;
+      bestLoop = loop;
+    }
+  }
+  return bestLoop;
+}
+
+function rectangleOnEdge(a, b, hull) {
+  var dx = b.e - a.e;
+  var dy = b.n - a.n;
+  var len = Math.hypot(dx, dy) || 1;
+  var ux = dx / len;
+  var uy = dy / len;
+  var vx = -uy;
+  var vy = ux;
+  var minU = Infinity;
+  var maxU = -Infinity;
+  var minV = Infinity;
+  var maxV = -Infinity;
+  for (var i = 0; i < hull.length; i++) {
+    var u = (hull[i].e - a.e) * ux + (hull[i].n - a.n) * uy;
+    var v = (hull[i].e - a.e) * vx + (hull[i].n - a.n) * vy;
+    if (u < minU) minU = u;
+    if (u > maxU) maxU = u;
+    if (v < minV) minV = v;
+    if (v > maxV) maxV = v;
+  }
+  function corner(u, v) {
+    return { e: a.e + ux * u + vx * v, n: a.n + uy * u + vy * v };
+  }
+  return [corner(minU, minV), corner(maxU, minV), corner(maxU, maxV), corner(minU, maxV)];
+}
+
+function convexHull(points) {
+  var unique = [];
+  var seen = {};
+  points.forEach(function (point) {
+    var key = point.e.toFixed(2) + "," + point.n.toFixed(2);
+    if (seen[key]) return;
+    seen[key] = 1;
+    unique.push(point);
+  });
+  unique.sort(function (a, b) { return a.e - b.e || a.n - b.n; });
+  function cross(o, a, b) {
+    return (a.e - o.e) * (b.n - o.n) - (a.n - o.n) * (b.e - o.e);
+  }
+  var lower = [];
+  var upper = [];
+  unique.forEach(function (point) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
+    lower.push(point);
+  });
+  for (var i = unique.length - 1; i >= 0; i--) {
+    var point = unique[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
+    upper.push(point);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+function lowestGrid(acc, scale, wcs, model, siteFrame) {
+  var ranked = [];
+  acc.grids.forEach(function (grid) {
+    var frame = placementFrame(acc, grid.placementId, scale, wcs);
+    if (frame) ranked.push({ grid: grid, frame: frame, z: frame.origin[2] });
+  });
+  if (!ranked.length) return { lines: [], z: null, name: "" };
+  ranked.sort(function (a, b) { return a.z - b.z; });
+  var chosen = ranked[0];
+  var lines = [];
+  chosen.grid.axisIds.forEach(function (id) {
+    var axis = acc.gridAxes.get(id);
+    if (!axis) return;
+    var rawPoints = curvePoints(acc, axis.curveId);
+    if (!rawPoints || rawPoints.length < 2) return;
+    var points = rawPoints.map(function (raw) {
+      var placed = framePoint(chosen.frame, raw[0] * scale, raw[1] * scale, (raw[2] || 0) * scale);
+      return toSurvey(model, siteFrame, placed);
+    });
+    lines.push({ tag: axis.tag || "", sameSense: axis.sameSense, points: points });
+  });
+  var origin = toSurvey(model, siteFrame, framePoint(chosen.frame, 0, 0, 0));
+  return { lines: lines, z: origin.z, name: chosen.grid.name || "Grid" };
+}
+
+function curvePoints(acc, curveId) {
+  var refs = acc.polylines.get(curveId);
+  if (refs && refs.length >= 2) {
+    var fromPolyline = [];
+    for (var i = 0; i < refs.length; i++) {
+      var raw = acc.points.get(refs[i]);
+      if (!raw) return null;
+      fromPolyline.push(raw);
+    }
+    return fromPolyline;
+  }
+  var curve = acc.polycurves.get(curveId);
+  if (!curve) return null;
+  var listed = acc.curveLists.get(curve.listId);
+  if (!listed || listed.length < 2) return null;
+  if (!curve.indexes || !curve.indexes.length) return listed;
+  var picked = [];
+  for (var k = 0; k < curve.indexes.length; k++) {
+    var point = listed[curve.indexes[k] - 1];
+    if (!point) return null;
+    picked.push(point);
+  }
+  return picked.length >= 2 ? picked : null;
+}
+
+function missingGridNote(description) {
+  var convert = description && /Convert Grid elements:\s*On/i.test(description);
+  var collision = description && /Collision Detection only:\s*On/i.test(description);
+  if (convert && collision) {
+    return "No IfcGrid in this file. Convert Grid elements is on, but this export kept only geometry that participates in collision detection, so the grid lines were left out.";
+  }
+  if (convert) return "No IfcGrid in this file. Convert Grid elements is on, but this export contains no grid lines.";
+  return "No IfcGrid in this file.";
+}
+
+function robustEdge(values, scale) {
+  var sorted = values.slice().sort(function (a, b) { return a - b; });
+  var gap = 50 / scale;
+  var n = sorted.length;
+  var min = sorted[0];
+  var max = sorted[n - 1];
+  var trimmed = false;
+  for (var hi = n - 1; hi > 0; hi--) {
+    if (sorted[hi] - sorted[hi - 1] > gap && (n - hi) / n <= 0.005) {
+      max = sorted[hi - 1];
+      trimmed = true;
+    } else if (sorted[hi] - sorted[hi - 1] > gap) break;
+  }
+  for (var lo = 0; lo < n - 1; lo++) {
+    if (sorted[lo + 1] - sorted[lo] > gap && (lo + 1) / n <= 0.005) {
+      min = sorted[lo + 1];
+      trimmed = true;
+    } else if (sorted[lo + 1] - sorted[lo] > gap) break;
+  }
+  return { min: min * scale, max: max * scale, trimmed: trimmed };
+}
+
+function polysOverlap(a, b) {
+  function separated(poly, other) {
+    for (var i = 0; i < poly.length; i++) {
+      var next = poly[(i + 1) % poly.length];
+      var nx = -(next.n - poly[i].n);
+      var ny = next.e - poly[i].e;
+      var aMin = Infinity;
+      var aMax = -Infinity;
+      var bMin = Infinity;
+      var bMax = -Infinity;
+      poly.forEach(function (point) {
+        var t = point.e * nx + point.n * ny;
+        aMin = Math.min(aMin, t);
+        aMax = Math.max(aMax, t);
+      });
+      other.forEach(function (point) {
+        var t = point.e * nx + point.n * ny;
+        bMin = Math.min(bMin, t);
+        bMax = Math.max(bMax, t);
+      });
+      if (aMax < bMin || bMax < aMin) return true;
+    }
+    return false;
+  }
+  return !separated(a, b) && !separated(b, a);
+}
+
+function worldZRange(model) {
+  if (model.footZ) return model.footZ;
+  var corners = boxCorners(model);
+  if (!corners) return null;
+  var z0 = Infinity;
+  var z1 = -Infinity;
+  corners.forEach(function (point) {
+    z0 = Math.min(z0, point.z);
+    z1 = Math.max(z1, point.z);
+  });
+  return [z0, z1];
+}
+
+function shareZone(a, b) {
+  var loopA = planLoop(a);
+  var loopB = planLoop(b);
+  var zA = worldZRange(a);
+  var zB = worldZRange(b);
+  if (!loopA || !loopB || !zA || !zB) return null;
+  if (zA[1] < zB[0] || zB[1] < zA[0]) return false;
+  return polysOverlap(loopA, loopB);
+}
+
+function compareModels(models) {
+  var pairs = [];
+  for (var i = 0; i < models.length; i++) {
+    for (var j = i + 1; j < models.length; j++) {
+      var a = models[i];
+      var b = models[j];
+      if (!a.hasPosition || !b.hasPosition) {
+        pairs.push({ a: a, b: b, missing: true, share: null, separated: false, fail: false });
+        continue;
+      }
+      var share = shareZone(a, b);
+      pairs.push({
+        a: a,
+        b: b,
+        horiz: Math.hypot(b.e - a.e, b.n - a.n),
+        ang: angleDelta(a.bearing, b.bearing),
+        share: share,
+        separated: share === false,
+        missing: false,
+        fail: share === false
+      });
+    }
+  }
+  return {
+    pairs: pairs,
+    fail: pairs.some(function (pair) { return pair.separated; })
+  };
+}
+
+function esc(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+  });
+}
+
+function formatMetres(value) {
+  if (!Number.isFinite(value)) return "—";
+  return value.toLocaleString("en-AU", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + " m";
+}
+
+function formatDistance(metres) {
+  if (!Number.isFinite(metres)) return "—";
+  var text = formatMetres(metres);
+  if (metres >= 1000) {
+    text += " (" + (metres / 1000).toLocaleString("en-AU", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + " km)";
+  } else if (metres < 10) {
+    text += " (" + Math.round(metres * 1000).toLocaleString("en-AU") + " mm)";
+  }
+  return text;
+}
+
+function cardinal(deg) {
+  var wrapped = ((deg % 360) + 360) % 360;
+  return CARDINAL[Math.round(wrapped / 22.5) % 16];
+}
+
+function formatBearing(deg) {
+  if (!Number.isFinite(deg)) return "—";
+  var wrapped = ((deg % 360) + 360) % 360;
+  if (wrapped < 0.0005 || wrapped > 359.9995) wrapped = 0;
+  return wrapped.toLocaleString("en-AU", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + "° (" + cardinal(wrapped) + ")";
+}
+
+function formatTrueNorth(deg) {
+  if (!Number.isFinite(deg)) return "—";
+  var wrapped = ((deg % 360) + 360) % 360;
+  if (wrapped < 0.0005 || wrapped > 359.9995) wrapped = 0;
+  return wrapped.toLocaleString("en-AU", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + "° (TN)";
+}
+
+function formatDelta(deg) {
+  if (!Number.isFinite(deg)) return "—";
+  var shown = deg < 0.0005 ? 0 : deg;
+  return shown.toLocaleString("en-AU", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + "°";
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function geometryNote(model) {
+  if (model.geometryFar) {
+    return "Some coordinates are more than 10 km from the origin and are not the site placement. Check this model before federating.";
+  }
+  var placedBy = model.source === "map"
+    ? "The map position is IfcMapConversion, so the receiving software has to apply it."
+    : "The map position is the site placement, so the receiving software has to apply it.";
+  if (!model.geometrySpan) {
+    return "No object coordinates were found near the file origin. " + placedBy + " The meshes are not stored on survey coordinates.";
+  }
+  var span = model.geometrySpan;
+  var trimmed = model.extentTrimmed ? " Geometry more than 50 m away from the main group was left out of the outline." : "";
+  return "Object coordinates stay near the file origin (" +
+    span.width.toFixed(0) + " m × " + span.depth.toFixed(0) +
+    " m in plan, levels " + formatMetres(span.zMin) + " to " + formatMetres(span.zMax) +
+    "). " + placedBy + " The meshes are not stored on survey coordinates." + trimmed;
+}
+
+function render() {
+  var root = document.getElementById("report");
+  var models = state.models;
+  if (!models.length) {
+    root.innerHTML = "";
+    return;
+  }
+  var comparison = compareModels(models);
+  var html = [];
+  if (models.length < 2) {
+    html.push('<section class="banner info"><strong>One file read</strong>Add another IFC to compare zones.</section>');
+  } else if (comparison.fail) {
+    html.push('<section class="banner fail"><strong>Fail</strong>At least two model extents are completely outside each other. They do not share a zone.</section>');
+  } else {
+    html.push('<section class="banner info"><strong>Check coordination</strong>The model extents overlap. Confirm that shared zone before federating.</section>');
+  }
+  html.push(renderPlots(models));
+  if (comparison.pairs.length) html.push(renderPairs(comparison.pairs));
+  html.push('<section class="cards">');
+  models.forEach(function (model) { html.push(renderCard(model)); });
+  html.push("</section>");
+  root.innerHTML = html.join("");
+  root.querySelectorAll("[data-remove]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var id = Number(button.getAttribute("data-remove"));
+      state.models = state.models.filter(function (model) { return model.id !== id; });
+      render();
+    });
+  });
+  bindOrbit();
+  root.querySelectorAll("[data-plan-zoom]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var mode = button.getAttribute("data-plan-zoom");
+      if (mode === "fit") state.planZoom = 100;
+      else if (mode === "in") state.planZoom = Math.min(200, state.planZoom + 25);
+      else state.planZoom = Math.max(50, state.planZoom - 25);
+      render();
+    });
+  });
+}
+
+function setAxesFromAbscissa(model, abscissa, ordinate) {
+  var ax = abscissa == null ? 1 : abscissa;
+  var ay = ordinate == null ? 0 : ordinate;
+  var len = Math.hypot(ax, ay);
+  if (len < 1e-8) { ax = 1; ay = 0; len = 1; }
+  ax /= len;
+  ay /= len;
+  model.axisX = [ax, ay, 0];
+  model.axisY = [-ay, ax, 0];
+  model.axisZ = [0, 0, 1];
+}
+
+function mapPoint(model, x, y, z) {
+  return {
+    e: model.e + x * model.axisX[0] + y * model.axisY[0] + z * model.axisZ[0],
+    n: model.n + x * model.axisX[1] + y * model.axisY[1] + z * model.axisZ[1],
+    z: model.z + x * model.axisX[2] + y * model.axisY[2] + z * model.axisZ[2]
+  };
+}
+
+function boxCorners(model) {
+  var loop = planLoop(model);
+  var range = model.footZ;
+  if (!loop && model.hasPosition && model.localBox && model.axisX) {
+    var lo = model.localBox.min;
+    var hi = model.localBox.max;
+    var midZ = (lo[2] + hi[2]) / 2;
+    loop = [
+      mapPoint(model, lo[0], lo[1], midZ),
+      mapPoint(model, hi[0], lo[1], midZ),
+      mapPoint(model, hi[0], hi[1], midZ),
+      mapPoint(model, lo[0], hi[1], midZ)
+    ];
+    range = [mapPoint(model, 0, 0, lo[2]).z, mapPoint(model, 0, 0, hi[2]).z].sort(function (a, b) { return a - b; });
+  }
+  if (!loop || !range) return null;
+  var corners = [];
+  loop.forEach(function (point) { corners.push({ e: point.e, n: point.n, z: range[0] }); });
+  loop.forEach(function (point) { corners.push({ e: point.e, n: point.n, z: range[1] }); });
+  return corners;
+}
+
+function planLoop(model) {
+  if (model.footprint && model.footprint.length >= 3) return model.footprint;
+  return null;
+}
+
+function renderPlots(models) {
+  var placed = models.filter(function (model) { return model.hasPosition; });
+  if (!placed.length) return "";
+  var html = ['<section class="panel"><h2>Model extents</h2>'];
+  html.push('<p class="plot-note">Each outline is the rectangle of that model, turned so one side sits on the X axis and then turned back. Grid lines, when the file has them, are taken from the lowest grid only. Drag the 3D view to orbit. When two origins are more than 0.5 km apart, the shapes stay readable and an arrow between them is marked Too Far.</p>');
+  html.push('<div class="diagrams"><div><div class="plan-head"><h3>Plan</h3><div class="zoom">');
+  html.push('<button type="button" data-plan-zoom="out"' + (state.planZoom <= 50 ? " disabled" : "") + ">−</button>");
+  html.push('<button type="button" data-plan-zoom="fit">Fit</button>');
+  html.push('<button type="button" data-plan-zoom="in"' + (state.planZoom >= 200 ? " disabled" : "") + ">+</button>");
+  html.push('</div></div><div class="plan-view" style="--plan-zoom:' + (state.planZoom / 100) + '">' + planSvg(placed) + '</div></div><div><h3>3D</h3>' + isoSvg(placed) + "</div></div>");
+  html.push(legendHtml(placed));
+  html.push("</section>");
+  return html.join("");
+}
+
+function legendHtml(models) {
+  var html = ['<div class="legend">'];
+  models.forEach(function (model) {
+    html.push('<span><i style="background:' + model.color + '"></i>' + esc(model.fileName) + "</span>");
+  });
+  html.push("</div>");
+  return html.join("");
+}
+
+function niceStep(metresPerPx) {
+  var target = 120 * metresPerPx;
+  var pow = Math.pow(10, Math.floor(Math.log10(Math.max(target, 1e-9))));
+  var nice = 10 * pow;
+  [1, 2, 5, 10].forEach(function (step) {
+    var candidate = step * pow;
+    if (candidate >= target * 0.5 && candidate < nice) nice = candidate;
+  });
+  return nice;
+}
+
+function svgFrame(width, height) {
+  return '<svg class="plot" viewBox="0 0 ' + width + " " + height + '" role="img"><rect x="0" y="0" width="' + width + '" height="' + height + '" fill="#fffcf7"></rect>';
+}
+
+function clusterModels(models) {
+  var parent = models.map(function (_, index) { return index; });
+  function find(index) {
+    while (parent[index] !== index) {
+      parent[index] = parent[parent[index]];
+      index = parent[index];
+    }
+    return index;
+  }
+  for (var a = 0; a < models.length; a++) {
+    for (var b = a + 1; b < models.length; b++) {
+      if (Math.hypot(models[a].e - models[b].e, models[a].n - models[b].n) <= 500) parent[find(a)] = find(b);
+    }
+  }
+  var groups = new Map();
+  models.forEach(function (model, index) {
+    var root = find(index);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(model);
+  });
+  return Array.from(groups.values());
+}
+
+function clusterBounds(group) {
+  var minE = Infinity, maxE = -Infinity, minN = Infinity, maxN = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  group.forEach(function (model) {
+    var corners = boxCorners(model) || [{ e: model.e, n: model.n, z: model.z }];
+    corners.forEach(function (point) {
+      minE = Math.min(minE, point.e); maxE = Math.max(maxE, point.e);
+      minN = Math.min(minN, point.n); maxN = Math.max(maxN, point.n);
+      minZ = Math.min(minZ, point.z); maxZ = Math.max(maxZ, point.z);
+    });
+    (model.gridLines || []).forEach(function (line) {
+      line.points.forEach(function (point) {
+        minE = Math.min(minE, point.e); maxE = Math.max(maxE, point.e);
+        minN = Math.min(minN, point.n); maxN = Math.max(maxN, point.n);
+        minZ = Math.min(minZ, point.z); maxZ = Math.max(maxZ, point.z);
+      });
+    });
+  });
+  var padE = Math.max(4, (maxE - minE) * 0.08);
+  var padN = Math.max(4, (maxN - minN) * 0.08);
+  var padZ = Math.max(2, (maxZ - minZ) * 0.08);
+  return {
+    minE: minE - padE, maxE: maxE + padE,
+    minN: minN - padN, maxN: maxN + padN,
+    minZ: minZ - padZ, maxZ: maxZ + padZ
+  };
+}
+
+function closestOrigins(a, b) {
+  var best = Infinity;
+  a.forEach(function (left) {
+    b.forEach(function (right) {
+      best = Math.min(best, Math.hypot(left.e - right.e, left.n - right.n));
+    });
+  });
+  return best;
+}
+
+function layoutClusters(models) {
+  var clusters = clusterModels(models);
+  var bounds = clusters.map(clusterBounds);
+  var maxSpan = 1;
+  bounds.forEach(function (box) {
+    maxSpan = Math.max(maxSpan, box.maxE - box.minE, box.maxN - box.minN, box.maxZ - box.minZ);
+  });
+  return { clusters: clusters, bounds: bounds, maxSpan: maxSpan };
+}
+
+function planSvg(models) {
+  var layout = layoutClusters(models);
+  var scale = 280 / layout.maxSpan;
+  var gap = layout.clusters.length > 1 ? 100 : 0;
+  var slots = [];
+  var cursor = 0;
+  var maxH = 0;
+  layout.bounds.forEach(function (box) {
+    var w = (box.maxE - box.minE) * scale;
+    var h = (box.maxN - box.minN) * scale;
+    slots.push({ box: box, x: cursor, w: w, h: h });
+    maxH = Math.max(maxH, h);
+    cursor += w + gap;
+  });
+  var contentW = cursor - gap;
+  var width = Math.max(680, Math.ceil(contentW + 120));
+  var shift = (width - contentW) / 2;
+  slots.forEach(function (slot) { slot.x += shift; });
+  var height = Math.max(360, Math.ceil(maxH + 88));
+  var top = Math.max(28, (height - 36 - maxH) / 2);
+  function xOf(easting, slot) { return slot.x + (easting - slot.box.minE) * scale; }
+  function yOf(northing, slot) { return top + (slot.box.maxN - northing) * scale; }
+  var parts = [svgFrame(width, height)];
+  layout.clusters.forEach(function (group, index) {
+    var slot = slots[index];
+    group.forEach(function (model) {
+      var loop = planLoop(model);
+      if (loop) {
+        var d = loop.map(function (point, pointIndex) {
+          return (pointIndex ? "L" : "M") + xOf(point.e, slot).toFixed(1) + " " + yOf(point.n, slot).toFixed(1);
+        }).join(" ") + " Z";
+        parts.push('<path d="' + d + '" fill="' + model.color + '" fill-opacity="0.22" stroke="' + model.color + '" stroke-width="2"></path>');
+      }
+      drawGridLines(parts, model, function (point) {
+        return { x: xOf(point.e, slot), y: yOf(point.n, slot) };
+      }, true);
+      parts.push('<circle cx="' + xOf(model.e, slot).toFixed(1) + '" cy="' + yOf(model.n, slot).toFixed(1) + '" r="3.5" fill="' + model.color + '" stroke="#fffcf7" stroke-width="1.5"></circle>');
+    });
+    var cx = slot.x + slot.w / 2;
+    var cy = top + slot.h / 2;
+    drawPlanNorth(parts, cx, cy);
+  });
+  for (var i = 0; i < slots.length - 1; i++) {
+    var y = top + maxH / 2;
+    var x1 = slots[i].x + slots[i].w + 8;
+    var x2 = slots[i + 1].x - 8;
+    drawArrow(parts, x1, y, x2, y, "#1c1915");
+    var label = "Too Far · " + formatDistance(closestOrigins(layout.clusters[i], layout.clusters[i + 1]));
+    parts.push('<text x="' + ((x1 + x2) / 2).toFixed(1) + '" y="' + (y - 10) + '" text-anchor="middle" fill="#8c2f2f" font-size="13" font-weight="650">' + esc(label) + "</text>");
+  }
+  var nice = niceStep(1 / scale);
+  parts.push('<line x1="36" y1="' + (height - 16) + '" x2="' + (36 + nice * scale) + '" y2="' + (height - 16) + '" stroke="#1c1915" stroke-width="2"></line>');
+  parts.push('<text x="' + (44 + nice * scale) + '" y="' + (height - 12) + '" fill="#1c1915" font-size="12">' + esc(formatDistance(nice)) + "</text>");
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+function drawPlanNorth(parts, x, y) {
+  var tip = y - 22;
+  var tail = y + 8;
+  parts.push('<line x1="' + x.toFixed(1) + '" y1="' + tail.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + (tip + 6).toFixed(1) + '" stroke="#1c1915" stroke-width="1.6"></line>');
+  parts.push('<path d="M' + x.toFixed(1) + " " + tip.toFixed(1) + ' l4 7 h-8 z" fill="#1c1915"></path>');
+  parts.push('<text x="' + x.toFixed(1) + '" y="' + (tip - 4).toFixed(1) + '" text-anchor="middle" fill="#1c1915" font-size="12" font-weight="700" stroke="#fffcf7" stroke-width="3" paint-order="stroke">N</text>');
+  parts.push('<text x="' + x.toFixed(1) + '" y="' + (y + 5).toFixed(1) + '" text-anchor="middle" fill="#1c1915" font-size="13" font-weight="700" stroke="#fffcf7" stroke-width="3" paint-order="stroke">Z</text>');
+}
+
+function drawGridLines(parts, model, project, labeled) {
+  (model.gridLines || []).forEach(function (line) {
+    if (!line.points || line.points.length < 2) return;
+    var screen = line.points.map(project);
+    var d = screen.map(function (point, index) {
+      return (index ? "L" : "M") + point.x.toFixed(1) + " " + point.y.toFixed(1);
+    }).join(" ");
+    parts.push('<path d="' + d + '" fill="none" stroke="' + model.color + '" stroke-width="1.3"></path>');
+    if (!labeled || !line.tag) return;
+    var last = line.sameSense ? screen.length - 1 : 0;
+    var prev = line.sameSense ? screen.length - 2 : 1;
+    var dx = screen[last].x - screen[prev].x;
+    var dy = screen[last].y - screen[prev].y;
+    var len = Math.hypot(dx, dy) || 1;
+    var lx = screen[last].x + (dx / len) * 12;
+    var ly = screen[last].y + (dy / len) * 12;
+    parts.push('<text x="' + lx.toFixed(1) + '" y="' + (ly + 3).toFixed(1) + '" text-anchor="middle" fill="' + model.color + '" font-size="11" font-weight="700" stroke="#fffcf7" stroke-width="3" paint-order="stroke">' + esc(line.tag) + "</text>");
+  });
+}
+
+function drawArrow(parts, x1, y1, x2, y2, color) {
+  var dx = x2 - x1;
+  var dy = y2 - y1;
+  var len = Math.hypot(dx, dy);
+  if (len < 8) return;
+  parts.push('<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '" stroke="' + color + '" stroke-width="1.5"></line>');
+  dx /= len;
+  dy /= len;
+  var s = 9;
+  var px = -dy * 4;
+  var py = dx * 4;
+  var bx = x2 - dx * s;
+  var by = y2 - dy * s;
+  parts.push('<path d="M' + x2.toFixed(1) + " " + y2.toFixed(1) + " L" + (bx + px).toFixed(1) + " " + (by + py).toFixed(1) + " L" + (bx - px).toFixed(1) + " " + (by - py).toFixed(1) + ' Z" fill="' + color + '"></path>');
+}
+
+function rotatePoint(point, center) {
+  var x = point.e - center.e;
+  var y = point.n - center.n;
+  var z = point.z - center.z;
+  var cy = Math.cos(state.orbit.yaw);
+  var sy = Math.sin(state.orbit.yaw);
+  var x1 = cy * x - sy * y;
+  var y1 = sy * x + cy * y;
+  var cp = Math.cos(state.orbit.pitch);
+  var sp = Math.sin(state.orbit.pitch);
+  return { x: x1, y: -(sp * y1 + cp * z), depth: cp * y1 - sp * z };
+}
+
+function isoSvg(models, innerOnly) {
+  var built = buildIso(models);
+  if (innerOnly) return built.inner;
+  return '<svg id="iso-view" data-orbit="1" class="plot" viewBox="0 0 ' + built.width + " " + built.height + '" role="img">' + built.inner + "</svg>";
+}
+
+function buildIso(models) {
+  var layout = layoutClusters(models);
+  var groups = layout.clusters.map(function (group, index) {
+    var box = layout.bounds[index];
+    var center = {
+      e: (box.minE + box.maxE) / 2,
+      n: (box.minN + box.maxN) / 2,
+      z: (box.minZ + box.maxZ) / 2
+    };
+    var pts = [];
+    group.forEach(function (model) {
+      var corners = boxCorners(model) || [{ e: model.e, n: model.n, z: model.z }];
+      corners.forEach(function (corner) { pts.push(rotatePoint(corner, center)); });
+      (model.gridLines || []).forEach(function (line) {
+        line.points.forEach(function (point) { pts.push(rotatePoint(point, center)); });
+      });
+    });
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    pts.forEach(function (point) {
+      minX = Math.min(minX, point.x); maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y); maxY = Math.max(maxY, point.y);
+    });
+    return { group: group, center: center, minX: minX, maxX: maxX, minY: minY, maxY: maxY };
+  });
+  var maxSpan = 1;
+  groups.forEach(function (group) {
+    maxSpan = Math.max(maxSpan, group.maxX - group.minX, group.maxY - group.minY);
+  });
+  var scale = 280 / maxSpan;
+  var gap = groups.length > 1 ? 100 : 0;
+  var cursor = 0;
+  var maxH = 0;
+  groups.forEach(function (group) {
+    group.w = (group.maxX - group.minX) * scale;
+    group.h = (group.maxY - group.minY) * scale;
+    group.slot = cursor;
+    maxH = Math.max(maxH, group.h);
+    cursor += group.w + gap;
+  });
+  var contentW = cursor - gap;
+  var width = Math.max(680, Math.ceil(contentW + 120));
+  var shift = (width - contentW) / 2;
+  groups.forEach(function (group) { group.slot += shift; });
+  var height = Math.max(360, Math.ceil(maxH + 72));
+  var top = Math.max(28, (height - maxH) / 2);
+  function sx(group, x) { return group.slot + (x - group.minX) * scale; }
+  function sy(group, y) { return top + (y - group.minY) * scale; }
+  var faces = [];
+  var faceOrder = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
+  groups.forEach(function (group) {
+    group.group.forEach(function (model) {
+      var corners = boxCorners(model);
+      if (!corners) return;
+      faceOrder.forEach(function (order) {
+        var world = order.map(function (index) { return corners[index]; });
+        var screen = world.map(function (point) { return rotatePoint(point, group.center); });
+        var depth = 0;
+        screen.forEach(function (point) { depth += point.depth; });
+        faces.push({ model: model, group: group, screen: screen, depth: depth / screen.length });
+      });
+    });
+  });
+  faces.sort(function (a, b) { return a.depth - b.depth; });
+  var parts = ['<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="#fffcf7"></rect>'];
+  parts.push('<text x="' + (width - 118) + '" y="18" fill="#5c564c" font-size="12">Drag to orbit</text>');
+  faces.forEach(function (face) {
+    var d = face.screen.map(function (point, index) {
+      return (index ? "L" : "M") + sx(face.group, point.x).toFixed(1) + " " + sy(face.group, point.y).toFixed(1);
+    }).join(" ") + " Z";
+    parts.push('<path d="' + d + '" fill="' + face.model.color + '" fill-opacity="0.35" stroke="' + face.model.color + '" stroke-width="1.4"></path>');
+  });
+  for (var i = 0; i < groups.length - 1; i++) {
+    var y = top + maxH / 2;
+    var x1 = groups[i].slot + groups[i].w + 8;
+    var x2 = groups[i + 1].slot - 8;
+    drawArrow(parts, x1, y, x2, y, "#1c1915");
+    var label = "Too Far · " + formatDistance(closestOrigins(layout.clusters[i], layout.clusters[i + 1]));
+    parts.push('<text x="' + ((x1 + x2) / 2).toFixed(1) + '" y="' + (y - 10) + '" text-anchor="middle" fill="#8c2f2f" font-size="13" font-weight="650">' + esc(label) + "</text>");
+  }
+  groups.forEach(function (group) {
+    group.group.forEach(function (model) {
+      drawGridLines(parts, model, function (point) {
+        var rotated = rotatePoint(point, group.center);
+        return { x: sx(group, rotated.x), y: sy(group, rotated.y) };
+      }, false);
+    });
+    drawWorldAxes(parts, group, sx, sy, scale);
+  });
+  return { width: width, height: height, inner: parts.join("") };
+}
+
+function drawWorldAxes(parts, group, sx, sy, scale) {
+  var reach = 0.22 * Math.max(group.maxX - group.minX, group.maxY - group.minY, 1);
+  if (reach * scale < 48) reach = 48 / scale;
+  var origin = rotatePoint(group.center, group.center);
+  var axes = [
+    ["X", "#c2410c", reach, 0, 0],
+    ["Y", "#15803d", 0, reach, 0],
+    ["Z", "#1d4ed8", 0, 0, reach]
+  ];
+  var x1 = sx(group, origin.x);
+  var y1 = sy(group, origin.y);
+  axes.forEach(function (axis) {
+    var end = rotatePoint({
+      e: group.center.e + axis[2],
+      n: group.center.n + axis[3],
+      z: group.center.z + axis[4]
+    }, group.center);
+    var x2 = sx(group, end.x);
+    var y2 = sy(group, end.y);
+    drawArrow(parts, x1, y1, x2, y2, axis[1]);
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var len = Math.hypot(dx, dy) || 1;
+    parts.push('<text x="' + (x2 + dx / len * 12).toFixed(1) + '" y="' + (y2 + dy / len * 12 + 4).toFixed(1) + '" text-anchor="middle" fill="' + axis[1] + '" font-size="13" font-weight="700" stroke="#fffcf7" stroke-width="3" paint-order="stroke">' + axis[0] + "</text>");
+  });
+}
+
+function bindOrbit() {
+  var svg = document.getElementById("iso-view");
+  if (!svg) return;
+  var drag = null;
+  svg.addEventListener("pointerdown", function (event) {
+    drag = { x: event.clientX, y: event.clientY, yaw: state.orbit.yaw, pitch: state.orbit.pitch };
+    svg.setPointerCapture(event.pointerId);
+  });
+  svg.addEventListener("pointermove", function (event) {
+    if (!drag) return;
+    state.orbit.yaw = drag.yaw - (event.clientX - drag.x) * 0.008;
+    state.orbit.pitch = Math.max(-1.15, Math.min(1.15, drag.pitch + (event.clientY - drag.y) * 0.008));
+    var built = buildIso(state.models.filter(function (model) { return model.hasPosition; }));
+    svg.setAttribute("viewBox", "0 0 " + built.width + " " + built.height);
+    svg.innerHTML = built.inner;
+  });
+  function stop() { drag = null; }
+  svg.addEventListener("pointerup", stop);
+  svg.addEventListener("pointercancel", stop);
+}
+
+function renderPairs(pairs) {
+  var html = ['<section class="panel"><h2>Pairs</h2><table><thead><tr><th>Files</th><th>Horizontal</th><th>Height</th><th>True north</th><th>Result</th></tr></thead><tbody>'];
+  pairs.forEach(function (pair) {
+    html.push('<tr class="' + (pair.fail ? "fail" : "") + '"><td>' + esc(pair.a.fileName) + "<br>" + esc(pair.b.fileName) + "</td>");
+    if (pair.missing) {
+      html.push('<td colspan="4">One of these files has no site position. Check coordination.</td></tr>');
+      return;
+    }
+    html.push("<td>" + esc(formatDistance(pair.horiz)) + "</td>");
+    html.push("<td>" + esc(formatHeight(pair.a)) + "<br>" + esc(formatHeight(pair.b)) + "</td>");
+    html.push("<td>" + esc(formatTrueNorth(pair.a.trueNorth)) + "<br>" + esc(formatTrueNorth(pair.b.trueNorth)) + "</td><td>" + resultTag(pair) + "</td></tr>");
+  });
+  html.push("</tbody></table></section>");
+  return html.join("");
+}
+
+function formatHeight(model) {
+  var range = worldZRange(model);
+  if (!range) return "—";
+  return formatMetres(range[0]) + " to " + formatMetres(range[1]);
+}
+
+function resultTag(pair) {
+  if (pair.separated) return '<span class="tag fail">Fail</span>';
+  return '<span class="tag check">Check coordination</span>';
+}
+
+function renderCard(model, index) {
+  var html = ['<article class="panel card"><div class="swatch" style="background:' + model.color + '"></div>'];
+  html.push("<h3>" + esc(model.fileName) + "</h3>");
+  html.push('<p class="meta">' + esc([model.software, model.schema, model.units, model.project].filter(Boolean).join(" · ")) +
+    (model.sizeLabel ? " · " + esc(model.sizeLabel) : "") +
+    (model.seconds != null ? " · read in " + model.seconds.toFixed(1) + " s" : "") + "</p>");
+  html.push("<p><strong>Export setting:</strong> " + esc(model.exportSetting || "Not stated in the header") + "</p>");
+  if (model.error) html.push('<p class="note">' + esc(model.error) + "</p>");
+  if (model.hasPosition) {
+    var source = model.source === "map" ? "IfcMapConversion" : "IfcSite placement";
+    if (model.crsName) source += " · " + model.crsName;
+    html.push("<p>Position from " + esc(source) + (model.siteCount > 1 ? " (first of " + model.siteCount + " sites)" : "") + ".</p>");
+    html.push('<div class="nums"><div><span>Easting</span><strong>' + esc(formatMetres(model.e)) + "</strong></div>");
+    html.push("<div><span>Northing</span><strong>" + esc(formatMetres(model.n)) + "</strong></div>");
+    html.push("<div><span>Height</span><strong>" + esc(formatHeight(model)) + "</strong></div></div>");
+    html.push("<p>Model +X bearing " + esc(formatBearing(model.bearing)) + " from grid north.</p>");
+    if (model.axisX) {
+      html.push("<p>X axis abscissa " + model.axisX[0].toFixed(3) + ", ordinate " + model.axisX[1].toFixed(3) + ".</p>");
+    }
+    html.push("<p>True north " + esc(formatBearing(model.trueNorth)) + " in the world coordinate system.</p>");
+    if (model.gridLines && model.gridLines.length) {
+      html.push("<p>Lowest grid (" + esc(model.gridName || "Grid") + ") has " + model.gridLines.length + " lines at " + esc(formatMetres(model.gridZ)) + ".</p>");
+    } else {
+      html.push("<p>" + esc(missingGridNote(model.fileDescription)) + "</p>");
+    }
+  }
+  if (model.lat || model.lon) {
+    html.push("<p>Latitude " + esc(formatCompound(model.lat, "N", "S")) + "<br>Longitude " + esc(formatCompound(model.lon, "E", "W")) + "</p>");
+  }
+  if (model.refElevation != null) {
+    html.push("<p>Site datum (RefElevation) " + esc(formatMetres(model.refElevation)) + ". This is separate from the placement level.</p>");
+  }
+  model.buildings.forEach(function (building) {
+    if (building.offset > 0.001) {
+      html.push("<p>Building " + esc(building.name || "unnamed") + " is " + esc(formatDistance(building.offset)) +
+        " from the site origin, at E " + esc(formatMetres(building.e)) + ", N " + esc(formatMetres(building.n)) +
+        ", Z " + esc(formatMetres(building.z)) + ".</p>");
+    }
+  });
+  if (model.buildings.length && model.buildings.every(function (building) { return building.offset <= 0.001; })) {
+    html.push("<p>Building placement matches the site origin.</p>");
+  }
+  html.push('<p class="note">' + esc(geometryNote(model)) + "</p>");
+  html.push('<div class="card-tools"><button type="button" data-remove="' + model.id + '">Remove</button></div></article>');
+  return html.join("");
+}
+
+function yieldSoon() {
+  return new Promise(function (resolve) { setTimeout(resolve, 0); });
+}
+
+async function readPass(file, onLine, onProgress) {
+  if (!file.stream) {
+    var text = await file.text();
+    var lines = text.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      if (onLine(lines[i]) === false) return;
+    }
+    return;
+  }
+  var reader = file.stream().getReader();
+  var decoder = new TextDecoder("utf-8", { fatal: false });
+  var leftover = "";
+  var received = 0;
+  var lastUi = 0;
+  while (true) {
+    var chunk = await reader.read();
+    if (chunk.done) break;
+    received += chunk.value.byteLength;
+    var text = leftover + decoder.decode(chunk.value, { stream: true });
+    var parts = text.split("\n");
+    leftover = parts.pop();
+    var stop = false;
+    for (var p = 0; p < parts.length; p++) {
+      if (onLine(parts[p]) === false) { stop = true; break; }
+    }
+    var now = performance.now();
+    if (onProgress && now - lastUi > 200) {
+      lastUi = now;
+      onProgress(received / file.size);
+      await yieldSoon();
+    }
+    if (stop) {
+      await reader.cancel();
+      return;
+    }
+  }
+  leftover += decoder.decode();
+  if (leftover) onLine(leftover);
+}
+
+async function parseFile(file, onProgress) {
+  var started = performance.now();
+  var acc = createAccumulator();
+  await readPass(file, function (line) { ingestLine(acc, line); }, onProgress);
+  collectNeed(acc);
+  if (acc.need.size) {
+    await readPass(file, function (line) { return ingestResolveLine(acc, line); }, onProgress);
+  }
+  var model = modelFromAccumulator(acc, file.name);
+  model.id = ++state.seq;
+  model.color = COLORS[(model.id - 1) % COLORS.length];
+  model.slot = model.id - 1;
+  model.sizeLabel = formatBytes(file.size || 0);
+  model.seconds = (performance.now() - started) / 1000;
+  return model;
+}
+
+async function addFiles(fileList) {
+  var files = Array.prototype.filter.call(fileList, function (file) {
+    return /\.ifc$/i.test(file.name);
+  });
+  var skipped = fileList.length - files.length;
+  var status = document.getElementById("status");
+  if (!files.length) {
+    status.textContent = skipped ? "Those files are not IFC." : "";
+    return;
+  }
+  for (var i = 0; i < files.length; i++) {
+    var file = files[i];
+    status.textContent = "Reading " + file.name + " (" + (i + 1) + " of " + files.length + ")…";
+    try {
+      var model = await parseFile(file, function (fraction) {
+        status.textContent = "Reading " + file.name + "… " + Math.round(fraction * 100) + "%";
+      });
+      state.models.push(model);
+      render();
+    } catch (error) {
+      state.models.push({
+        id: ++state.seq,
+        color: COLORS[(state.seq - 1) % COLORS.length],
+        slot: state.seq - 1,
+        fileName: file.name,
+        hasPosition: false,
+        error: "This file could not be read. " + (error && error.message ? error.message : ""),
+        buildings: [],
+        software: "",
+        schema: "",
+        units: "",
+        project: "",
+        exportSetting: ""
+      });
+      render();
+    }
+  }
+  status.textContent = "Checked " + files.length + " file" + (files.length === 1 ? "" : "s") +
+    (skipped ? ". Skipped " + skipped + " that were not IFC." : ".");
+}
+
+function init() {
+  var drop = document.getElementById("drop");
+  var input = document.getElementById("file");
+  document.addEventListener("dragover", function (event) { event.preventDefault(); });
+  document.addEventListener("drop", function (event) { event.preventDefault(); });
+  drop.addEventListener("dragover", function (event) {
+    event.preventDefault();
+    drop.classList.add("hot");
+  });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("hot"); });
+  drop.addEventListener("drop", function (event) {
+    event.preventDefault();
+    drop.classList.remove("hot");
+    if (event.dataTransfer && event.dataTransfer.files) addFiles(event.dataTransfer.files);
+  });
+  input.addEventListener("change", function () {
+    addFiles(input.files);
+    input.value = "";
+  });
+  document.getElementById("clear").addEventListener("click", function () {
+    state.models = [];
+    state.orbit = { yaw: 0.7, pitch: 0.55 };
+    state.planZoom = 100;
+    document.getElementById("status").textContent = "";
+    render();
+  });
+}
+
+if (typeof document !== "undefined") init();
+</script>
+</body>
+</html>
