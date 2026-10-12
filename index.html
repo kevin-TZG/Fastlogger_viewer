@@ -44,18 +44,23 @@
   header.top li { margin: 0 0 6px; }
   header.top a { color: var(--info); }
   main { max-width: 980px; margin: 0 auto; padding: 18px 24px 64px; }
+  .drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .drop {
     border: 1.5px dashed #b7ab9a;
     background: var(--paper);
     border-radius: 16px;
-    padding: 28px 22px;
+    padding: 22px 18px;
     text-align: center;
     box-shadow: var(--shadow);
   }
   .drop.over { border-color: var(--info); background: #f4f8fb; }
   .drop strong { display: block; font-size: 18px; margin-bottom: 4px; }
-  .drop span { color: var(--muted); }
+  .drop .where { color: var(--muted); font-size: 13px; display: block; margin-top: 4px; }
+  .drop .chosen { color: var(--ink); font-size: 13px; display: block; margin-top: 8px; min-height: 1.2em; word-break: break-word; }
   .drop input { margin-top: 14px; }
+  @media (max-width: 800px) {
+    .drops { grid-template-columns: 1fr; }
+  }
   .row { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 12px; }
   button, .tabs button {
     font: inherit;
@@ -127,7 +132,7 @@
   }
   @media print {
     body { background: white; }
-    .drop, .tabs, .noprint { display: none; }
+    .drops, .drop, .tabs, .noprint { display: none; }
     article.report { box-shadow: none; }
     .pane { display: block !important; }
   }
@@ -144,12 +149,26 @@
   </ol>
 </header>
 <main>
-  <div class="drop" id="drop">
-    <strong>Drop FastLogger files here</strong>
-    <div class="row">
-      <input id="picker" type="file" accept=".log,.rpt,.txt" multiple>
-      <button type="button" id="sampleHint" class="noprint" title="What this page can and cannot show">What you will get</button>
+  <div class="drops">
+    <div class="drop" id="dropLogs">
+      <strong>FastLogger</strong>
+      <span class="where">Archicad Log Folder, the FastLogger files for the session. Several files are fine.</span>
+      <span class="chosen" id="logChosen">None yet</span>
+      <div class="row">
+        <input id="pickerLogs" type="file" accept=".log,.txt" multiple>
+      </div>
     </div>
+    <div class="drop" id="dropCrash">
+      <strong>Crash report</strong>
+      <span class="where">Library / Application Support / Graphisoft / BugReporting, the .rpt for the same session.</span>
+      <span class="chosen" id="rptChosen">None yet</span>
+      <div class="row">
+        <input id="pickerCrash" type="file" accept=".rpt,.rpta" multiple>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <button type="button" id="sampleHint" class="noprint" title="What this page can and cannot show">What you will get</button>
   </div>
   <div id="app"></div>
 </main>
@@ -1339,20 +1358,191 @@ function looksLikeCrash(bytes) {
   return head.indexOf("<crash") !== -1 || head.indexOf("<exitcause>") !== -1;
 }
 
-function crashNote(name) {
+function tagText(xml, tag) {
+  const m = xml.match(new RegExp("<" + tag + ">([^<]*)</" + tag + ">"));
+  return m ? m[1].trim() : "";
+}
+
+function demangle(atos) {
+  const raw = String(atos).replace(/\s*\+.*/, "").trim();
+  const nested = raw.match(/^__ZN(.*)/);
+  const plain = raw.match(/^__Z(\d+)/);
+  if (nested) {
+    let s = nested[1];
+    const names = [];
+    let i = 0;
+    while (i < s.length && s.charAt(i) !== "E") {
+      const len = parseInt(s.slice(i), 10);
+      if (!len) break;
+      const digits = String(len).length;
+      i += digits;
+      names.push(s.slice(i, i + len));
+      i += len;
+    }
+    const useful = names.filter((n) => n.indexOf("_GLOBAL") !== 0 && n !== "GS");
+    if (useful.length) return useful.join("::");
+  }
+  if (plain) {
+    const len = parseInt(plain[1], 10);
+    const digits = String(len).length;
+    const body = raw.slice(3 + digits, 3 + digits + len);
+    if (body) return body;
+  }
+  const objc = raw.match(/^[+-]\[([^\]]+)\]/);
+  if (objc) return objc[1];
+  return raw.replace(/^__+/, "");
+}
+
+function glossCommand(name) {
+  const known = {
+    MergeModelContentChangesCommand: "Incoming Teamwork changes were merged",
+    TWReservationChangedHandleReservationChangedTaskRunCommand: "A reservation change was applied",
+    ReleaseResolvableObjectSetCommand: "Released a reserved set",
+    ReserveResolvableObjectSetCommand: "Reserved a set",
+    ModifyLayerSetCommand: "Modified the layer set",
+    ChangeLayerCombinationCommand: "Changed the layer combination",
+    ReBuildCommand: "Rebuilt the view",
+    OpenIESInActWindowCommand: "Opened an interior elevation",
+    DraftingViewOpenDraftingInActWindowCommand: "Opened a drafting view",
+    TWReserveSelectedElementsSingleSaveCommand: "Reserved the selected elements",
+    ChangeItemParametersCommand: "Changed element parameters",
+    DelayedDrawingRedrawCommand: "Redrew drawings",
+    DrawingLinkStatusCheckerDo2Command: "Checked drawing links",
+    PNOpenViewCommandClass: "Opened a navigator view",
+    UpdateMainPlanTypeCommand: "Updated the plan view",
+    DrawingsAutoUpdaterDoAutoUpdateDrawings2Command: "Auto-updated drawings",
+    StorePlanWindowViewSettingDuringIESCommand: "Stored the plan view while an interior elevation was open",
+    PNSetFolderStateCommand: "Opened or closed a navigator folder",
+    EditorControlRadioItemChangedCommand: "Changed an editor option"
+  };
+  if (known[name]) return known[name];
+  return name.replace(/Command(Class)?$/, "").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function faultName(signalId, codeId) {
+  const sig = parseInt(signalId, 16);
+  const code = parseInt(codeId, 16);
+  const sigs = { 11: "SIGSEGV", 10: "SIGBUS", 6: "SIGABRT", 4: "SIGILL" };
+  const codes = { 1: "SEGV_MAPERR", 2: "SEGV_ACCERR" };
+  const s = sigs[sig] || (signalId ? "signal " + signalId : "");
+  const c = codes[code] || "";
+  if (sig === 11) return "memory access fault" + (s ? " (" + s + (c ? ", " + c : "") + ")" : "");
+  return [s, c].filter(Boolean).join(", ") || "the process terminated";
+}
+
+function crashWhere(frames) {
+  const joined = frames.join(" ");
+  if (/LayerSettings/.test(joined)) return "Layer Settings";
+  if (/AttributeDialogInvoker/.test(joined)) return "an attribute dialog";
+  if (/ResolvableObjectSet/.test(joined)) return "a reserved-set dialog";
+  return frames[0] || "Archicad";
+}
+
+function parseCrash(file) {
+  const xml = latin1(file.bytes, 0, file.bytes.length);
+  if (xml.indexOf("<crash") === -1) return null;
+  const projectRaw = tagText(xml, "ProjectName");
+  const projectName = projectRaw.replace(/\s*\[[^\]]*\]\s*$/, "").trim();
+  const bracket = (projectRaw.match(/\[([^\]]+)\]/) || [])[1] || "";
+  const server = (bracket.split(" - ")[0] || "").replace(/,.*$/, "").trim();
+  const pidHex = tagText(xml, "pid");
+  const pid = pidHex ? parseInt(pidHex, 16) : (parseInt((file.name.match(/\[(\d+)\]/) || [])[1], 10) || 0);
+  const frames = [];
+  const frameRe = /<atos>([^<]+)<\/atos>/g;
+  let fm;
+  while ((fm = frameRe.exec(xml))) {
+    const name = demangle(fm[1]);
+    if (name && frames.indexOf(name) < 0) frames.push(name);
+    if (frames.length >= 8) break;
+  }
+  const commands = [];
+  const cmdRe = /<commandTime>([^<]+)<\/commandTime><commandName>([^<]+)<\/commandName>/g;
+  let cm;
+  while ((cm = cmdRe.exec(xml)) && commands.length < 12) {
+    commands.push({ time: cm[1].trim(), name: cm[2].trim(), label: glossCommand(cm[2].trim()) });
+  }
+  const signalId = tagText(xml, "id");
+  const codeMatch = xml.match(/<signalcode><id>([^<]+)<\/id>/);
   return {
-    files: [name],
-    user: "",
-    server: "",
+    file: file.name,
+    user: tagText(xml, "username"),
+    version: tagText(xml, "packageversion"),
+    exit: tagText(xml, "exitcause"),
+    projectName: projectName,
+    server: server.trim(),
+    pid: pid,
+    fault: faultName(signalId, codeMatch ? codeMatch[1] : ""),
+    where: crashWhere(frames),
+    stack: frames,
+    commands: commands
+  };
+}
+
+function sameProcess(logNames, pid) {
+  if (!pid) return false;
+  const re = new RegExp(pid + "-\\d+\\.log$", "i");
+  return logNames.some((n) => re.test(n));
+}
+
+function attachCrash(report, crash) {
+  if (report.files.indexOf(crash.file) < 0) report.files.push(crash.file);
+  if (crash.projectName && !report.openedName) report.openedName = crash.projectName;
+  if (crash.server && !report.server) report.server = crash.server;
+  if (crash.user && !report.user) report.user = crash.user;
+  const sentence = "Archicad crashed in " + crash.where + (crash.fault ? " (" + crash.fault + ")" : "") + ".";
+  report.lead = sentence + (report.lead ? " " + report.lead : "");
+  const stackBits = crash.stack.filter((n) => !/^(Main|start|Application::Run|ACApplication::Run|ACApplication::MainMessageLoop)$/.test(n)).slice(0, 4);
+  report.events.unshift({
+    tone: "high",
+    text: sentence + (stackBits.length ? " Call stack: " + stackBits.join("; ") + "." : "")
+  });
+  if (crash.commands.length) {
+    report.events.splice(1, 0, {
+      tone: "medium",
+      text: "Last commands before the crash: " + crash.commands.slice(0, 6).map((c) => c.time.replace(/^[\d/]+\s/, "") + " " + c.label).join("; ") + "."
+    });
+  }
+  const matched = sameProcess(report.files, crash.pid);
+  report.issues.unshift({
+    severity: "high",
+    title: "Archicad crashed",
+    paragraphs: [
+      sentence + (crash.version ? " Build " + crash.version + "." : "") + (crash.projectName ? " Project in the crash report: " + crash.projectName + "." : ""),
+      stackBits.length
+        ? "The functions on the stack are " + stackBits.join(", ") + ". That is the dialog Archicad was inside when it quit, not a BIMcloud disconnect."
+        : "The crash report did not include a readable call stack.",
+      crash.commands.length
+        ? (crash.commands[0].name === "MergeModelContentChangesCommand"
+          ? "The newest command merged incoming Teamwork changes, so other people's edits arrived while this dialog was still running. The crash report keeps a clock time on each command."
+          : "The crash report keeps a clock time on each command. The newest are listed below.")
+        : "",
+      matched
+        ? "Process " + crash.pid + " is the same Archicad session as the FastLogger files dropped with this report."
+        : "Drop the FastLogger files from the same session (the log name ends with this process id, " + (crash.pid || "shown in the .rpt file name") + ") to add the send, reservation, and delay detail."
+    ].filter(Boolean),
+    evidence: crash.commands.slice(0, 8).map((c) => c.time + " — " + c.label).concat(crash.stack.slice(0, 5).map((n) => "Stack: " + n))
+  });
+}
+
+function reportFromCrashes(crashes) {
+  const first = crashes[0];
+  const report = {
+    files: [],
+    user: first.user || "",
+    server: first.server || "",
     project: "",
+    openedName: first.projectName || "",
+    email: "",
     presence: [],
     flags: {},
-    lead: name + " is an Archicad crash report (.rpt), not a FastLogger session log. Drop the Log-*.log files from the FastLogger folder for a Teamwork send summary.",
-    events: [{ tone: "low", text: "Crash reports are XML. This page reads the binary FastLogger logs (Log-########.log)." }],
     issues: [],
-    timeRange: "",
+    events: [],
+    lead: "",
+    timeRange: first.commands[0] ? first.commands[0].time : "",
     codes: []
   };
+  crashes.forEach((c) => attachCrash(report, c));
+  return report;
 }
 
 async function readFiles(fileList) {
@@ -1361,28 +1551,78 @@ async function readFiles(fileList) {
     const buf = await file.arrayBuffer();
     out.push({ name: file.name, lastModified: file.lastModified, bytes: new Uint8Array(buf) });
   }
-  const crash = out.find((f) => looksLikeCrash(f.bytes));
-  if (crash && out.length === 1) {
-    render(crashNote(crash.name));
+  const crashes = [];
+  const seenPid = {};
+  out.forEach((f) => {
+    if (!looksLikeCrash(f.bytes)) return;
+    const parsed = parseCrash(f);
+    if (!parsed) return;
+    const key = parsed.pid || parsed.file;
+    if (seenPid[key]) return;
+    seenPid[key] = true;
+    crashes.push(parsed);
+  });
+  const logs = out.filter((f) => !looksLikeCrash(f.bytes));
+  if (!logs.length) {
+    render(crashes.length ? reportFromCrashes(crashes) : {
+      files: out.map((f) => f.name),
+      user: "", server: "", project: "", openedName: "", email: "",
+      presence: [], flags: {}, issues: [], events: [{ tone: "low", text: "No FastLogger or crash report was found in the dropped files." }],
+      lead: "Nothing readable was dropped.", timeRange: "", codes: []
+    });
     return;
   }
-  const logs = out.filter((f) => !looksLikeCrash(f.bytes));
-  render(analyze(logs));
+  const report = analyze(logs);
+  crashes.forEach((c) => attachCrash(report, c));
+  render(report);
 }
 
 function boot() {
-  const drop = document.getElementById("drop");
-  const picker = document.getElementById("picker");
-  picker.addEventListener("change", () => { if (picker.files.length) readFiles(picker.files); });
-  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    drop.classList.remove("over");
-    if (e.dataTransfer.files.length) readFiles(e.dataTransfer.files);
-  });
+  const picked = { logs: [], crash: [] };
+
+  function chosenText(files) {
+    if (!files.length) return "None yet";
+    const names = files.slice(0, 2).map((f) => f.name);
+    if (files.length > 2) names.push("+" + (files.length - 2) + " more");
+    return names.join(", ");
+  }
+
+  function publish() {
+    document.getElementById("logChosen").textContent = chosenText(picked.logs);
+    document.getElementById("rptChosen").textContent = chosenText(picked.crash);
+    const all = picked.logs.concat(picked.crash);
+    if (all.length) readFiles(all);
+  }
+
+  function take(kind, fileList) {
+    const files = Array.from(fileList);
+    const keep = files.filter((f) => kind === "logs" ? !/\.rpt/i.test(f.name) : /\.rpt/i.test(f.name));
+    const label = document.getElementById(kind === "logs" ? "logChosen" : "rptChosen");
+    if (!keep.length) {
+      label.textContent = kind === "logs" ? "Those are crash reports. Use the other box." : "Those are not .rpt files. Use the FastLogger box.";
+      return;
+    }
+    picked[kind] = keep;
+    publish();
+  }
+
+  function wire(id, kind) {
+    const drop = document.getElementById(id);
+    const input = drop.querySelector("input");
+    input.addEventListener("change", () => { if (input.files.length) take(kind, input.files); });
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      if (e.dataTransfer.files.length) take(kind, e.dataTransfer.files);
+    });
+  }
+
+  wire("dropLogs", "logs");
+  wire("dropCrash", "crash");
   document.getElementById("sampleHint").onclick = () => {
-    alert("Summary: who was online, whether Send & Receive reached the server, long steps, a rolled-back write, an old migration library, and the main faults in order.\n\nFull description: each fault, plus any step that ran for 8 seconds or more and the view on screen when that step was near a window change.\n\nThe original log is not modified.");
+    alert("Left box: FastLogger files from the Archicad Log Folder.\n\nRight box: the .rpt from Library / Application Support / Graphisoft / BugReporting for the same session.\n\nEither box can be filled on its own. Filling the other updates the same report. The original files are not modified.");
   };
 }
 
